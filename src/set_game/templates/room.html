@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}SET{% endblock %}
+
+{% block content %}
+<div id="room-root" class="room" data-room-code="{{ room_code }}">
+
+  <section id="connecting-view" class="center-panel view">
+    <p>Connecting&hellip;</p>
+  </section>
+
+  <section id="waiting-view" class="waiting-view view" hidden>
+    <h1 class="game-title" id="waiting-title">Waiting room</h1>
+    <div class="invite-row">
+      <span class="muted">Share the link or this code to invite players.</span>
+      <strong class="invite-code" id="invite-code" aria-label="Invite code"></strong>
+      <button id="copy-link-btn" class="btn btn-secondary invite-copy-btn" type="button">Copy invite link</button>
+      <div id="manual-copy" class="manual-copy" hidden>
+        <input id="invite-link-input" class="text-input" type="text" readonly aria-label="Invite link">
+        <span class="muted">Link selected &mdash; press Ctrl+C, &#8984;C, or choose Copy.</span>
+      </div>
+    </div>
+
+    <div class="section-heading-row">
+      <h2 class="section-label">Players</h2>
+      <span id="player-count" class="muted">0 / 8</span>
+    </div>
+    <ul id="waiting-player-list" class="row-list"></ul>
+
+    <p id="spectator-note" class="muted" hidden>A game is already in progress &mdash; you'll join as a spectator and be seated for the next match.</p>
+    <p id="start-hint" class="muted"></p>
+    <button id="start-game-btn" class="btn btn-primary" type="button" hidden>Start game</button>
+  </section>
+
+  <section id="game-view" class="game-view view" hidden>
+    <div class="stage">
+      <div id="board" class="board" aria-live="polite"></div>
+
+      <aside class="rail">
+        <div id="rail-timer" class="rail-timer" hidden>
+          <div class="rail-ring-wrap">
+            <svg class="buzz-ring" viewBox="0 0 100 100">
+              <circle class="buzz-ring-track" cx="50" cy="50" r="45"></circle>
+              <circle id="buzz-ring-progress" class="buzz-ring-progress" cx="50" cy="50" r="45"></circle>
+            </svg>
+            <div class="rail-timer-face"><span id="rail-timer-seconds"></span></div>
+          </div>
+          <div class="rail-timer-label">
+            <strong id="rail-timer-name"></strong>
+            <span>is choosing&hellip;</span>
+          </div>
+        </div>
+
+        <div class="rail-deck">
+          <strong id="deck-count">0</strong>
+          cards left
+        </div>
+      </aside>
+
+      <div id="reveal-overlay" class="reveal-overlay" hidden aria-live="polite">
+        <p class="reveal-credit" id="reveal-credit"></p>
+        <div class="reveal-cards" id="reveal-cards"></div>
+        <div class="reveal-features" id="reveal-features"></div>
+        <p class="reveal-countdown" id="reveal-countdown"></p>
+      </div>
+    </div>
+
+    <div class="bottom">
+      <div class="players" id="players"></div>
+      <div class="actions">
+        <button id="buzz-btn" class="btn btn-buzz" type="button"><span class="btn-label">SET!</span><kbd>space</kbd></button>
+        <button id="no-set-btn" class="btn btn-secondary" type="button"><span class="btn-label">No Set</span><kbd>N</kbd></button>
+      </div>
+    </div>
+  </section>
+
+  <section id="gameover-view" class="gameover-view view" hidden>
+    <h1 class="game-title">Game over</h1>
+    <p id="winner-line" class="winner-line"></p>
+    <ol id="standings-list" class="row-list standings-list"></ol>
+    <div class="gameover-actions">
+      <button id="play-again-btn" class="btn btn-primary" type="button" hidden>Play again</button>
+      <a class="btn btn-secondary return-lobby-btn" href="/">Private game home</a>
+    </div>
+    <p id="play-again-hint" class="muted" hidden>Waiting for the host to start a new match&hellip;</p>
+  </section>
+
+  <div id="toast" class="toast" hidden></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/game.js') }}"></script>
+{% endblock %}
