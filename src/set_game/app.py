@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 import secrets
 
-from flask import Flask, abort, render_template
+from flask import Flask, Response, abort, render_template, request, url_for
 from flask_socketio import SocketIO
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -54,6 +54,8 @@ def create_app() -> Flask:
         response.headers.setdefault(
             "Permissions-Policy", "camera=(), microphone=(), geolocation=()"
         )
+        if request.endpoint in {"room", "healthz"}:
+            response.headers.setdefault("X-Robots-Tag", "noindex, nofollow, noarchive")
         return response
 
     # Importing registers the Socket.IO event handlers on `socketio`.
@@ -66,6 +68,24 @@ def create_app() -> Flask:
     @app.get("/healthz")
     def healthz():
         return {"status": "ok"}
+
+    @app.get("/robots.txt")
+    def robots():
+        body = "\n".join(
+            (
+                "User-agent: *",
+                "Allow: /",
+                "Disallow: /room/",
+                "Disallow: /healthz",
+                f"Sitemap: {url_for('sitemap', _external=True)}",
+                "",
+            )
+        )
+        return Response(body, mimetype="text/plain")
+
+    @app.get("/sitemap.xml")
+    def sitemap():
+        return Response(render_template("sitemap.xml"), mimetype="application/xml")
 
     @app.get("/room/<room_code>")
     def room(room_code: str):

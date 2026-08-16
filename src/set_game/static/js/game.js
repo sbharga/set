@@ -74,6 +74,7 @@ document.addEventListener("DOMContentLoaded", () => {
   };
   function showView(name) {
     Object.entries(views).forEach(([key, el]) => (el.hidden = key !== name));
+    deckStatusEl.hidden = name !== "game";
   }
 
   const boardEl = document.getElementById("board");
@@ -81,12 +82,12 @@ document.addEventListener("DOMContentLoaded", () => {
   const buzzBtn = document.getElementById("buzz-btn");
   const buzzLabelEl = buzzBtn.querySelector(".btn-label");
   const noSetBtn = document.getElementById("no-set-btn");
-  const noSetLabelEl = noSetBtn.querySelector(".btn-label");
+  const noSetVoteStatusEl = document.getElementById("no-set-vote-status");
+  const deckStatusEl = document.getElementById("deck-status");
   const deckCountEl = document.getElementById("deck-count");
-  const railTimer = document.getElementById("rail-timer");
+  const statusRailEl = document.getElementById("status-rail");
   const railTimerName = document.getElementById("rail-timer-name");
   const railTimerSeconds = document.getElementById("rail-timer-seconds");
-  const railDeckEl = document.querySelector(".rail-deck");
   const buzzRingProgress = document.getElementById("buzz-ring-progress");
   const revealOverlay = document.getElementById("reveal-overlay");
   const revealCreditEl = document.getElementById("reveal-credit");
@@ -94,8 +95,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const revealFeaturesEl = document.getElementById("reveal-features");
   const revealCountdownEl = document.getElementById("reveal-countdown");
   const toastEl = document.getElementById("toast");
-  const gameStatusEl = document.getElementById("game-status");
-  const matchTitleEl = document.getElementById("match-title");
   const connectionEl = document.getElementById("room-connection");
 
   const RING_CIRCUMFERENCE = 283; // 2 * pi * r45, matches the SVG circle
@@ -358,7 +357,6 @@ document.addEventListener("DOMContentLoaded", () => {
     connectionReady = true;
     showConnection("Connected", "live");
     latestSnapshot = snapshot;
-    matchTitleEl.textContent = snapshot.title;
     const now = performance.now();
     syncLockoutDeadlines(snapshot.players, now);
     // Mid-reveal reconnect: we don't have the claimed cards to replay the
@@ -563,50 +561,42 @@ document.addEventListener("DOMContentLoaded", () => {
     const lockoutMsLeft = Math.max(0, myDeadline - now);
     const lockedOut = lockoutMsLeft > 0;
     let label = "I found a SET!";
-    let status = "Spot a set? Claim the board, then choose your three cards.";
     if (!connectionReady) {
       label = "Reconnecting…";
-      status = "Hold on — we’re syncing the latest cards.";
     } else if (spectator) {
       label = "Watching this match";
-      status = "You’re watching this round. You’ll join the next match.";
     } else if (revealing) {
       label = `Next round in ${Math.ceil(revealMsLeft / 1000)}s`;
-      status = "Nice find! Take a moment to see why those cards make a set.";
     } else if (lockedOut) {
       label = `Ready again in ${Math.ceil(lockoutMsLeft / 1000)}s`;
-      status = "Take a quick breather, then jump back in.";
     } else if (
       buzzActive &&
       latestSnapshot.buzz.player_id === myPlayerId &&
       selectedCodes.size >= 3
     ) {
       label = "Checking your set…";
-      status = "Checking those three cards…";
     } else if (buzzActive && latestSnapshot.buzz.player_id === myPlayerId) {
       const left = 3 - selectedCodes.size;
       label = `Choose ${left} more card${left === 1 ? "" : "s"}`;
-      status = `The board is yours — choose ${left} more card${left === 1 ? "" : "s"}.`;
     } else if (buzzActive) {
       label = `${nameFor(latestSnapshot.buzz.player_id)} is choosing`;
-      status = `${nameFor(latestSnapshot.buzz.player_id)} claimed the board and is choosing three cards.`;
     }
     // Voting isn't a claim, so a lockout doesn't block it -- only the
     // connection, spectating, and windows where the board could be about
     // to change out from under the vote (an active buzz or the reveal
     // freeze) do.
     const iVoted = noSetVoters.has(myPlayerId);
-    let voteLabel = "No SET here";
-    if (noSetNeeded > 1 && noSetVoters.size > 0)
-      voteLabel = `No SET here · ${noSetVoters.size}/${noSetNeeded}`;
+    const voteStatus =
+      noSetVoters.size > 0 && noSetNeeded > 0
+        ? `${noSetVoters.size} of ${noSetNeeded} voted`
+        : "";
     return {
       disabled:
         !connectionReady || spectator || revealing || buzzActive || lockedOut,
       voteDisabled: !connectionReady || spectator || revealing || buzzActive,
-      voteLabel,
+      voteStatus,
       iVoted,
       label,
-      status,
       revealing,
       lockedOut,
       buzzActive,
@@ -622,8 +612,7 @@ document.addEventListener("DOMContentLoaded", () => {
     buzzBtn.classList.toggle("cooldown", state.lockedOut && !state.revealing);
     noSetBtn.classList.toggle("voted", state.iVoted);
     buzzLabelEl.textContent = state.label;
-    noSetLabelEl.textContent = state.voteLabel;
-    gameStatusEl.textContent = state.status;
+    noSetVoteStatusEl.textContent = state.voteStatus;
     updateBoardInteractivity();
   }
 
@@ -730,6 +719,9 @@ document.addEventListener("DOMContentLoaded", () => {
    * shift position (the board recompacting after a claim) glide there via
    * FLIP instead of teleporting; `enterCodes` get the deal-in animation. */
   function syncBoard(cards, enterCodes) {
+    boardEl.classList.toggle("board-large", cards.length > 12);
+    boardEl.classList.toggle("board-xlarge", cards.length > 15);
+    boardEl.classList.toggle("board-xxlarge", cards.length > 18);
     const enterSet = new Set(enterCodes || []);
     const existing = new Map();
     boardEl
@@ -761,7 +753,10 @@ document.addEventListener("DOMContentLoaded", () => {
           // pin transform to identity and block .selected's own lift.
           el.addEventListener(
             "animationend",
-            () => el.classList.remove("card-enter"),
+            () => {
+              el.classList.remove("card-enter");
+              el.style.animationDelay = "";
+            },
             { once: true },
           );
         }
@@ -773,10 +768,11 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     if (!REDUCED_MOTION) {
-      // Deal-in cards animate from the rail's deck gauge screen position.
-      const deckRect = railDeckEl.getBoundingClientRect();
-      boardEl.querySelectorAll(".card-enter").forEach((el) => {
+      // Deal-in cards animate from the deck count in the header.
+      const deckRect = deckStatusEl.getBoundingClientRect();
+      boardEl.querySelectorAll(".card-enter").forEach((el, index) => {
         const r = el.getBoundingClientRect();
+        el.style.animationDelay = `${index * 35}ms`;
         el.style.setProperty(
           "--deal-x",
           `${deckRect.left + deckRect.width / 2 - (r.left + r.width / 2)}px`,
@@ -801,7 +797,9 @@ document.addEventListener("DOMContentLoaded", () => {
         el.style.setProperty("--flip-x", `${dx}px`);
         el.style.setProperty("--flip-y", `${dy}px`);
         el.classList.add("card-flip", "card-flip-start");
-        requestAnimationFrame(() => el.classList.remove("card-flip-start"));
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => el.classList.remove("card-flip-start"));
+        });
         el.addEventListener(
           "transitionend",
           () => el.classList.remove("card-flip"),
@@ -933,7 +931,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function startBuzzUI(data) {
     const amBuzzer = data.player_id === myPlayerId;
     boardEl.classList.toggle("dimmed", !amBuzzer);
-    railTimer.hidden = false;
+    statusRailEl.hidden = false;
     railTimerName.textContent = amBuzzer ? "You" : data.name;
     buzzDeadline = performance.now() + data.remaining_ms;
     lastWholeSecond = null;
@@ -944,7 +942,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function stopBuzzUI() {
     boardEl.classList.remove("dimmed");
-    railTimer.hidden = true;
+    statusRailEl.hidden = true;
     buzzDeadline = 0;
     updateControlsEnabled();
     updateBoardInteractivity();

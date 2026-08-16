@@ -1,8 +1,15 @@
 {% extends "base.html" %}
-{% block title %}SET — Spot the pattern{% endblock %}
+{% set seo_title = "Play SET Online with Friends | Private Multiplayer Game" %}
+{% set seo_description = "Play SET online with friends. Create a private room, share the invite, and race to find matching card patterns—free in any modern browser." %}
+{% set seo_social_url = url_for('index', _external=true) %}
+{% block body_class %}home-page{% endblock %}
 
 {% block content %}
-  <div class="home">
+  <div class="home" itemscope itemtype="https://schema.org/VideoGame">
+    <meta itemprop="name" content="SET Multiplayer" />
+    <meta itemprop="gamePlatform" content="Web browser" />
+    <meta itemprop="playMode" content="MultiPlayer" />
+    <meta itemprop="applicationCategory" content="Game" />
     <section class="home-hero" aria-labelledby="home-title">
       <div class="hero-cards" aria-hidden="true">
         <span class="hero-card hero-card-one"><i></i></span>
@@ -12,7 +19,7 @@
       <h1 id="home-title" class="home-title">
         Find it. Call it. <em>SET!</em>
       </h1>
-      <p class="home-lede">
+      <p class="home-lede" itemprop="description">
         Fast eyes, clever patterns, and friendly competition. Easy to learn,
         delightfully tricky to master.
       </p>
@@ -78,9 +85,6 @@
       >
         Host a new game
       </button>
-      <p class="field-help">
-        You’ll get a private link to share with everyone.
-      </p>
       <p id="lobby-error" class="field-error" role="alert" hidden></p>
 
       <div class="join-by-code">
