@@ -96,7 +96,7 @@ class Game:
     order: list[str] = field(default_factory=list)  # join order, for stable display
 
     deck_remaining: list[int] = field(default_factory=list)
-    board: list[int | None] = field(default_factory=list)
+    board: list[int] = field(default_factory=list)
     buzz: Buzz | None = None
     reveal_until: float = 0.0
     winner_ids: list[str] = field(default_factory=list)
@@ -114,7 +114,9 @@ class Game:
     # RLock (not Lock) so a helper that re-enters the lock from within an
     # already-locked call path -- e.g. a broadcast helper called while a
     # handler still holds it -- doesn't self-deadlock.
-    lock: threading.RLock = field(default_factory=threading.RLock, compare=False, repr=False)
+    lock: threading.RLock = field(
+        default_factory=threading.RLock, compare=False, repr=False
+    )
 
     # --- membership -------------------------------------------------
 
@@ -123,7 +125,9 @@ class Game:
         host = next((p for p in self.players.values() if p.is_host), None)
         return f"{host.name}'s Game" if host else "New Game"
 
-    def add_player(self, player_id: str, sid: str, name: str, auth_digest: str = "") -> Player:
+    def add_player(
+        self, player_id: str, sid: str, name: str, auth_digest: str = ""
+    ) -> Player:
         if player_id in self.players:
             p = self.players[player_id]
             p.name = name
@@ -310,7 +314,14 @@ class Game:
         self.buzz = Buzz(player_id=player_id, deadline=now + BUZZ_SECONDS)
         return self.buzz
 
-    def select(self, player_id: str, card_code: int, now: float, *, defer_resolution: bool = False) -> str:
+    def select(
+        self,
+        player_id: str,
+        card_code: int,
+        now: float,
+        *,
+        defer_resolution: bool = False,
+    ) -> str:
         """Toggle a card in the active buzzer's selection.
 
         Returns one of: "selected", "deselected", "selection-complete",
@@ -343,9 +354,13 @@ class Game:
             )
             return "selection-complete"
 
-        return self.resolve_selection(player_id, tuple(self.buzz.selection), now)
+        selection = self.buzz.selection
+        expected_cards = (selection[0], selection[1], selection[2])
+        return self.resolve_selection(player_id, expected_cards, now)
 
-    def resolve_selection(self, player_id: str, expected_cards: tuple[int, int, int], now: float) -> str:
+    def resolve_selection(
+        self, player_id: str, expected_cards: tuple[int, int, int], now: float
+    ) -> str:
         """Resolve a deferred third-card selection if it is still current."""
         if not self.buzz or self.buzz.player_id != player_id:
             return "stale selection"
@@ -373,7 +388,9 @@ class Game:
         self._penalize(pid, now)
         return True
 
-    def expire_lockout(self, player_id: str, expected_deadline: float, now: float) -> bool:
+    def expire_lockout(
+        self, player_id: str, expected_deadline: float, now: float
+    ) -> bool:
         """Called by the scheduled lockout-expiry task. Returns True if this
         is still the lockout that scheduled it (i.e. the player hasn't since
         been penalized again with a later deadline), meaning it's safe to
@@ -434,7 +451,11 @@ class Game:
         """Re-evaluate a pending vote after the electorate shrank (a voter
         disconnected) or a blocking window just closed (buzz/reveal ended).
         A no-op unless a vote is actually pending and now unanimous."""
-        if self.phase != Phase.PLAYING or self.buzz is not None or self.reveal_until > now:
+        if (
+            self.phase != Phase.PLAYING
+            or self.buzz is not None
+            or self.reveal_until > now
+        ):
             return None
         if not self.no_set_votes:
             return None
@@ -442,12 +463,11 @@ class Game:
 
     # --- resolution -----------------------------------------------------
 
-    def _resolve_valid_set(self, player_id: str, cards: tuple[int, int, int], now: float) -> None:
+    def _resolve_valid_set(
+        self, player_id: str, cards: tuple[int, int, int], now: float
+    ) -> None:
         p = self.players[player_id]
         p.score += 1
-        for card_code in cards:
-            idx = self.board.index(card_code)
-            self.board[idx] = None
         self.buzz = None
         # The board is about to change; any pending "no set" votes were
         # about the old board and no longer apply.
@@ -456,20 +476,24 @@ class Game:
         # reveal animation before the next buzz is allowed.
         self.reveal_until = now + SET_REVEAL_SECONDS
 
-        # Per the rules: only refill up to BOARD_MIN. Cards claimed while
-        # the board is already above the minimum (15, 18...) are simply
-        # removed, not replaced, until the count drops back to 12.
-        gaps = self.board.count(None)
-        base_len = len(self.board) - gaps
-        if base_len < BOARD_MIN:
-            need = min(gaps, BOARD_MIN - base_len)
-            for _ in range(need):
-                if not self.deck_remaining:
-                    break
-                idx = self.board.index(None)
-                self.board[idx] = self.deck_remaining.pop()
-
-        self.board = [c for c in self.board if c is not None]
+        # Only refill up to BOARD_MIN. When the board is larger, claimed
+        # cards simply disappear until it returns to its normal size.
+        claimed = set(cards)
+        refill_count = min(
+            len(cards),
+            max(0, BOARD_MIN - (len(self.board) - len(cards))),
+            len(self.deck_remaining),
+        )
+        replacements = iter(self.deck_remaining.pop() for _ in range(refill_count))
+        updated_board: list[int] = []
+        for card_code in self.board:
+            if card_code not in claimed:
+                updated_board.append(card_code)
+                continue
+            replacement = next(replacements, None)
+            if replacement is not None:
+                updated_board.append(replacement)
+        self.board = updated_board
         self._check_end()
 
     def _penalize(self, player_id: str, now: float) -> float | None:
@@ -514,7 +538,11 @@ class Game:
             "room_code": self.room_code,
             "title": self.title,
             "phase": self.phase.value,
-            "players": [self.players[pid].to_dict(now) for pid in self.order if pid in self.players],
+            "players": [
+                self.players[pid].to_dict(now)
+                for pid in self.order
+                if pid in self.players
+            ],
             "board": [deck.Card.from_code(c).to_dict() for c in self.board],
             "deck_remaining": len(self.deck_remaining),
             "buzz": (

@@ -34,7 +34,7 @@ class Card:
     shading: str
 
     @staticmethod
-    def from_code(code: int) -> "Card":
+    def from_code(code: int) -> Card:
         if not 0 <= code < DECK_SIZE:
             raise ValueError(f"card code out of range: {code}")
         shape_i, rest = divmod(code, 27)

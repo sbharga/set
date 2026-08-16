@@ -4,7 +4,14 @@ from random import Random
 import pytest
 
 from set_game import deck
-from set_game.game import BOARD_MIN, BUZZ_SECONDS, LOCKOUT_SECONDS, SET_REVEAL_SECONDS, Game, Phase
+from set_game.game import (
+    BOARD_MIN,
+    BUZZ_SECONDS,
+    LOCKOUT_SECONDS,
+    SET_REVEAL_SECONDS,
+    Game,
+    Phase,
+)
 
 
 def make_game(seed=1, n_players=2):
@@ -41,7 +48,7 @@ def test_add_player_first_is_host():
 
 
 def test_add_player_during_active_game_is_spectator():
-    g, ids = make_game(n_players=1)
+    g, _ids = make_game(n_players=1)
     g.start()
     g.add_player("late", sid="sidX", name="Latecomer")
     assert g.players["late"].spectator is True
@@ -127,13 +134,18 @@ def test_deferred_selection_keeps_third_card_visible_before_verdict():
     g.start_buzz(ids[0], now)
     assert g.select(ids[0], bad_triple[0], now, defer_resolution=True) == "selected"
     assert g.select(ids[0], bad_triple[1], now, defer_resolution=True) == "selected"
-    assert g.select(ids[0], bad_triple[2], now, defer_resolution=True) == "selection-complete"
+    assert (
+        g.select(ids[0], bad_triple[2], now, defer_resolution=True)
+        == "selection-complete"
+    )
 
     # The complete selection remains intact and unscored during the short
     # visual preview; extra input is locked until the scheduled verdict.
     assert tuple(g.buzz.selection) == bad_triple
     assert g.players[ids[0]].score == 0
-    assert g.select(ids[0], g.board[3], now, defer_resolution=True) == "selection pending"
+    assert (
+        g.select(ids[0], g.board[3], now, defer_resolution=True) == "selection pending"
+    )
 
     assert g.resolve_selection(ids[0], bad_triple, now + 0.55) == "resolved-invalid"
     assert g.players[ids[0]].score == -1
@@ -217,7 +229,7 @@ def test_reveal_freeze_blocks_everyone_including_the_finder():
 
 
 def test_expire_reveal_rejects_early_and_stale_timers_and_acts_once():
-    g, ids = make_game(seed=20)
+    g, _ids = make_game(seed=20)
     g.start()
     now = time.monotonic()
     deadline = now + SET_REVEAL_SECONDS
@@ -465,7 +477,7 @@ def test_finished_room_drops_players_when_everyone_is_stale():
 
 
 def test_snapshot_serializes_board_as_card_dicts():
-    g, ids = make_game(seed=16)
+    g, _ids = make_game(seed=16)
     g.start()
     snap = g.snapshot()
     assert snap["phase"] == "playing"

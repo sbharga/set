@@ -14,6 +14,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const createRoomBtn = document.getElementById("create-room-btn");
   const codeInput = document.getElementById("room-code-input");
   const joinRoomBtn = document.getElementById("join-room-btn");
+  const connectionEl = document.getElementById("home-connection");
 
   function showPicker(name) {
     helloName.textContent = name;
@@ -56,23 +57,40 @@ document.addEventListener("DOMContentLoaded", () => {
     continueBtn.disabled = !nickInput.value.trim();
   });
   continueBtn.addEventListener("click", submitNickname);
-  document.getElementById("change-name").addEventListener("click", () => showGate(sessionStorage.getItem(NICK_KEY)));
+  document
+    .getElementById("change-name")
+    .addEventListener("click", () =>
+      showGate(sessionStorage.getItem(NICK_KEY)),
+    );
 
   const socket = io();
-  socket.on("connect", () => {
-    createRoomBtn.disabled = false;
+  function setConnection(connected) {
+    connectionEl.textContent = connected ? "Ready" : "Reconnecting";
+    connectionEl.classList.toggle("is-live", connected);
+    connectionEl.classList.toggle("is-offline", !connected);
+    createRoomBtn.disabled = !connected;
+  }
+  socket.on("connect", () => setConnection(true));
+  socket.on("disconnect", () => setConnection(false));
+  socket.on("connect_error", () => {
+    setConnection(false);
+    showLobbyError(
+      "We can’t reach the game server yet. Check your connection and try again.",
+    );
   });
-  socket.on("disconnect", () => {
-    createRoomBtn.disabled = true;
+  socket.on("action_error", (data) => {
+    createRoomBtn.textContent = "Host a new game";
+    createRoomBtn.disabled = !socket.connected;
+    showLobbyError(data.message);
   });
-  socket.on("connect_error", () => showLobbyError("Could not connect. Please try again."));
-  socket.on("action_error", (data) => showLobbyError(data.message));
   socket.on("room_created", (data) => {
     window.location.href = `/room/${data.room_code}`;
   });
 
   createRoomBtn.addEventListener("click", () => {
     lobbyError.hidden = true;
+    createRoomBtn.disabled = true;
+    createRoomBtn.textContent = "Creating your game…";
     socket.emit("create_room", { name: sessionStorage.getItem(NICK_KEY) });
   });
 
@@ -88,6 +106,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
   codeInput.addEventListener("input", () => {
     codeInput.value = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+    joinRoomBtn.disabled = !CODE_RE.test(codeInput.value);
     lobbyError.hidden = true;
   });
   codeInput.addEventListener("keydown", (event) => {

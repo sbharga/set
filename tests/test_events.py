@@ -3,12 +3,13 @@ import pytest
 from set_game.app import create_app, socketio
 from set_game.rooms import registry
 
-
 PLAYER_ID = "player-identifier-01"
 PLAYER_TOKEN = "a" * 64
 
 
-def join(client, room_code, name="Alice", player_id=PLAYER_ID, player_token=PLAYER_TOKEN):
+def join(
+    client, room_code, name="Alice", player_id=PLAYER_ID, player_token=PLAYER_TOKEN
+):
     client.emit(
         "join_room",
         {
@@ -57,7 +58,12 @@ def test_join_sends_full_snapshot_only_to_joiner(app):
     try:
         join(first, game.room_code, player_id="first-player-ident")
         first.get_received()
-        join(second, game.room_code, player_id="second-player-iden", player_token="b" * 64)
+        join(
+            second,
+            game.room_code,
+            player_id="second-player-iden",
+            player_token="b" * 64,
+        )
 
         first_events = [event["name"] for event in first.get_received()]
         second_events = [event["name"] for event in second.get_received()]
@@ -92,9 +98,21 @@ def test_host_can_kick_but_kicked_identity_cannot_rejoin(app):
 
         returning_guest = socketio.test_client(app)
         try:
-            join(returning_guest, game.room_code, player_id=guest_id, player_token=guest_token)
-            errors = [event for event in returning_guest.get_received() if event["name"] == "action_error"]
-            assert errors[0]["args"][0]["message"] == "You were removed from this game by its host."
+            join(
+                returning_guest,
+                game.room_code,
+                player_id=guest_id,
+                player_token=guest_token,
+            )
+            errors = [
+                event
+                for event in returning_guest.get_received()
+                if event["name"] == "action_error"
+            ]
+            assert (
+                errors[0]["args"][0]["message"]
+                == "You were removed from this game by its host."
+            )
         finally:
             if returning_guest.is_connected():
                 returning_guest.disconnect()
@@ -116,8 +134,16 @@ def test_malformed_card_payload_returns_error_instead_of_crashing_handler(app):
 
         client.emit("select_card", {"card": "not-a-card"})
 
-        errors = [event for event in client.get_received() if event["name"] == "action_error"]
-        assert errors == [{"name": "action_error", "args": [{"message": "Invalid card."}], "namespace": "/"}]
+        errors = [
+            event for event in client.get_received() if event["name"] == "action_error"
+        ]
+        assert errors == [
+            {
+                "name": "action_error",
+                "args": [{"message": "Invalid card."}],
+                "namespace": "/",
+            }
+        ]
     finally:
         if client.is_connected():
             client.disconnect()

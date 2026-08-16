@@ -1,99 +1,232 @@
 <!doctype html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}SET{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-  <link rel="icon" href="data:,">
-</head>
-<body>
-  <div class="topbar" role="toolbar" aria-label="Game controls">
-    <div class="topbar-actions">
-      {% block topbar_actions %}{% endblock %}
-      <div class="palette-control">
-        <button id="card-palette-toggle" class="icon-btn" type="button" aria-expanded="false" aria-controls="card-palette-popover" aria-label="Customize card colors" title="Card colors">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M12 3a9 9 0 0 0 0 18h1.4a1.6 1.6 0 0 0 1.2-2.7 1.6 1.6 0 0 1 1.2-2.7H18a3 3 0 0 0 3-3C21 7.3 17 3 12 3Z"/>
-            <circle cx="7.5" cy="11" r="1" fill="currentColor" stroke="none"/>
-            <circle cx="10" cy="7" r="1" fill="currentColor" stroke="none"/>
-            <circle cx="14.5" cy="7.5" r="1" fill="currentColor" stroke="none"/>
-          </svg>
-        </button>
-        <div id="card-palette-popover" class="palette-popover" hidden>
-          <strong class="palette-title">Card colors</strong>
-          <label class="palette-row" for="card-color-red">
-            <span>Red</span>
-            <input id="card-color-red" type="color" data-card-color="red">
-          </label>
-          <label class="palette-row" for="card-color-green">
-            <span>Green</span>
-            <input id="card-color-green" type="color" data-card-color="green">
-          </label>
-          <label class="palette-row" for="card-color-purple">
-            <span>Purple</span>
-            <input id="card-color-purple" type="color" data-card-color="purple">
-          </label>
-          <button id="card-palette-reset" class="palette-reset" type="button">Reset to defaults</button>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{% block title %}SET{% endblock %}</title>
+    <link
+      rel="stylesheet"
+      href="{{ url_for('static', filename='css/style.css') }}"
+    />
+    <link rel="icon" href="data:," />
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to game</a>
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="SET game home">
+        <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span>SET</span>
+      </a>
+      <nav class="topbar-actions" aria-label="Game settings">
+        {% block topbar_actions %}{% endblock %}
+        <div class="palette-control">
+          <button
+            id="card-palette-toggle"
+            class="icon-btn"
+            type="button"
+            aria-expanded="false"
+            aria-controls="card-palette-popover"
+            aria-label="Change card colors"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path
+                d="M12 3a9 9 0 0 0 0 18h1.4a1.6 1.6 0 0 0 1.2-2.7 1.6 1.6 0 0 1 1.2-2.7H18a3 3 0 0 0 3-3C21 7.3 17 3 12 3Z"
+              />
+              <circle
+                cx="7.5"
+                cy="11"
+                r="1"
+                fill="currentColor"
+                stroke="none"
+              />
+              <circle cx="10" cy="7" r="1" fill="currentColor" stroke="none" />
+              <circle
+                cx="14.5"
+                cy="7.5"
+                r="1"
+                fill="currentColor"
+                stroke="none"
+              />
+            </svg>
+            <span>Colors</span>
+          </button>
+          <div id="card-palette-popover" class="palette-popover" hidden>
+            <strong class="palette-title">Choose card colors</strong>
+            <p class="palette-hint">
+              Pick colors that are easiest for you to tell apart.
+            </p>
+            <label class="palette-row" for="card-color-red"
+              ><span>First color</span
+              ><input id="card-color-red" type="color" data-card-color="red"
+            /></label>
+            <label class="palette-row" for="card-color-green"
+              ><span>Second color</span
+              ><input
+                id="card-color-green"
+                type="color"
+                data-card-color="green"
+            /></label>
+            <label class="palette-row" for="card-color-purple"
+              ><span>Third color</span
+              ><input
+                id="card-color-purple"
+                type="color"
+                data-card-color="purple"
+            /></label>
+            <button id="card-palette-reset" class="palette-reset" type="button">
+              Use original colors
+            </button>
+          </div>
         </div>
-      </div>
-      <button id="mute-toggle" class="icon-btn" type="button" aria-pressed="false" aria-label="Mute sound (M)" title="Mute (M)">
-        <svg class="icon-on" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polygon points="4,9 8,9 12,5 12,19 8,15 4,15" fill="currentColor" stroke="none"/>
-          <path d="M16 8a6 6 0 0 1 0 8"/>
-          <path d="M18.5 5.5a10 10 0 0 1 0 13"/>
-        </svg>
-        <svg class="icon-off" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <polygon points="4,9 8,9 12,5 12,19 8,15 4,15" fill="currentColor" stroke="none"/>
-          <line x1="16" y1="9" x2="21" y2="14"/>
-          <line x1="21" y1="9" x2="16" y2="14"/>
-        </svg>
-      </button>
-      <button id="how-to-play-btn" class="icon-btn" type="button" aria-haspopup="dialog" aria-controls="how-to-play-modal" aria-label="How to play">?</button>
-    </div>
-  </div>
+        <button
+          id="mute-toggle"
+          class="icon-btn"
+          type="button"
+          aria-pressed="false"
+          aria-label="Turn sound off (M)"
+        >
+          <svg
+            class="icon-on"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <polygon
+              points="4,9 8,9 12,5 12,19 8,15 4,15"
+              fill="currentColor"
+              stroke="none"
+            />
+            <path d="M16 8a6 6 0 0 1 0 8" />
+            <path d="M18.5 5.5a10 10 0 0 1 0 13" />
+          </svg>
+          <svg
+            class="icon-off"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <polygon
+              points="4,9 8,9 12,5 12,19 8,15 4,15"
+              fill="currentColor"
+              stroke="none"
+            />
+            <line x1="16" y1="9" x2="21" y2="14" />
+            <line x1="21" y1="9" x2="16" y2="14" />
+          </svg>
+          <span id="sound-label">Sound on</span>
+        </button>
+        <button
+          id="how-to-play-btn"
+          class="icon-btn"
+          type="button"
+          aria-haspopup="dialog"
+          aria-controls="how-to-play-modal"
+          aria-label="Learn how to play"
+        >
+          <span class="help-icon" aria-hidden="true">?</span><span>Rules</span>
+        </button>
+      </nav>
+    </header>
 
-  <main class="content">
-    {% block content %}{% endblock %}
-  </main>
+    <main id="main-content" class="content">
+      {% block content %}{% endblock %}
+    </main>
 
-  {% include "_how_to_play.html" %}
+    {% include "_how_to_play.html" %}
 
-  <!-- Shared card geometry: every symbol shape is defined once here and
+    <!-- Shared card geometry: every symbol shape is defined once here and
        reused everywhere via <use href="#sym-...">, so a redraw only ever
        has to happen in one place. Colors resolve --card-red/green/purple
        from style.css so the palette itself has a single source too. -->
-  <svg class="symbol-defs" aria-hidden="true" focusable="false">
-    <defs>
-      <!-- True stadium: two straight sides capped by semicircles, width
+    <svg class="symbol-defs" aria-hidden="true" focusable="false">
+      <defs>
+        <!-- True stadium: two straight sides capped by semicircles, width
            68 x height 30, matching the diamond/squiggle bounding box so
            all three symbols read at the same visual scale. -->
-      <path id="sym-oval" d="M -19 -15 L 19 -15 A 15 15 0 0 1 19 15 L -19 15 A 15 15 0 0 1 -19 -15 Z"/>
-      <!-- Symmetric rhombus; corners are softened at render time via
+        <path
+          id="sym-oval"
+          d="M -19 -15 L 19 -15 A 15 15 0 0 1 19 15 L -19 15 A 15 15 0 0 1 -19 -15 Z"
+        />
+        <!-- Symmetric rhombus; corners are softened at render time via
            stroke-linejoin="round" in cards.js. -->
-      <path id="sym-diamond" d="M 0 -15 L 34 0 L 0 15 L -34 0 Z"/>
-      <!-- A full, flowing SET squiggle: broad enough to hold stripes and
+        <path id="sym-diamond" d="M 0 -15 L 34 0 L 0 15 L -34 0 Z" />
+        <!-- A full, flowing SET squiggle: broad enough to hold stripes and
            shaped as one clean S-curve instead of a thin bent ribbon. -->
-      <path id="sym-squiggle" d="M -34 7 C -28 -5 -18 -15 -8 -14 C 1 -13 7 -3 15 -5 C 23 -7 27 -15 32 -13 C 38 -10 36 0 32 7 C 26 17 16 18 6 12 C -2 7 -8 5 -14 11 C -21 18 -29 18 -33 13 C -35 11 -35 9 -34 7 Z"/>
+        <path
+          id="sym-squiggle"
+          d="M -34 7 C -28 -5 -18 -15 -8 -14 C 1 -13 7 -3 15 -5 C 23 -7 27 -15 32 -13 C 38 -10 36 0 32 7 C 26 17 16 18 6 12 C -2 7 -8 5 -14 11 C -21 18 -29 18 -33 13 C -35 11 -35 9 -34 7 Z"
+        />
 
-      <!-- Vertical stripes, tight and thin -- the real deck's striped
+        <!-- Vertical stripes, tight and thin -- the real deck's striped
            shading, not the heavy 45deg hatch this used to be. -->
-      <pattern id="stripes-red" patternUnits="userSpaceOnUse" width="4" height="4">
-        <line x1="0" y1="0" x2="0" y2="4" stroke="var(--card-red)" stroke-width="1.4"/>
-      </pattern>
-      <pattern id="stripes-green" patternUnits="userSpaceOnUse" width="4" height="4">
-        <line x1="0" y1="0" x2="0" y2="4" stroke="var(--card-green)" stroke-width="1.4"/>
-      </pattern>
-      <pattern id="stripes-purple" patternUnits="userSpaceOnUse" width="4" height="4">
-        <line x1="0" y1="0" x2="0" y2="4" stroke="var(--card-purple)" stroke-width="1.4"/>
-      </pattern>
-    </defs>
-  </svg>
+        <pattern
+          id="stripes-red"
+          patternUnits="userSpaceOnUse"
+          width="4"
+          height="4"
+        >
+          <line
+            x1="0"
+            y1="0"
+            x2="0"
+            y2="4"
+            stroke="var(--card-red)"
+            stroke-width="1.4"
+          />
+        </pattern>
+        <pattern
+          id="stripes-green"
+          patternUnits="userSpaceOnUse"
+          width="4"
+          height="4"
+        >
+          <line
+            x1="0"
+            y1="0"
+            x2="0"
+            y2="4"
+            stroke="var(--card-green)"
+            stroke-width="1.4"
+          />
+        </pattern>
+        <pattern
+          id="stripes-purple"
+          patternUnits="userSpaceOnUse"
+          width="4"
+          height="4"
+        >
+          <line
+            x1="0"
+            y1="0"
+            x2="0"
+            y2="4"
+            stroke="var(--card-purple)"
+            stroke-width="1.4"
+          />
+        </pattern>
+      </defs>
+    </svg>
 
-  <script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/audio.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/cards.js') }}"></script>
-  <script src="{{ url_for('static', filename='js/rules.js') }}"></script>
-  {% block scripts %}{% endblock %}
-</body>
+    <script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/audio.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/cards.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/rules.js') }}"></script>
+    {% block scripts %}{% endblock %}
+  </body>
 </html>

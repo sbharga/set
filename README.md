@@ -28,13 +28,16 @@ Use the included `render.yaml` to create a **single-instance** web service. Rend
 
 Do not scale this service beyond one instance or Gunicorn worker without moving room state and Socket.IO coordination to shared infrastructure such as Redis. Games and invite links are intentionally ephemeral: deploys, restarts, and idle-room cleanup remove them.
 
-## Tests
+## Quality checks
 
 ```bash
+uv run ruff check main.py src tests
+uv run ruff format --check main.py src tests
+uv run mypy main.py src tests
 uv run pytest
 ```
 
-Covers the SET rule engine, game state machine, Socket.IO edge cases, and server CLI.
+The tests cover the SET rule engine, game state machine, Socket.IO edge cases, and server CLI.
 
 ## Project layout
 
