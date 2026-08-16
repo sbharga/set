@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}SET{% endblock %}
+
+{% block content %}
+<div class="home">
+
+  <section id="nickname-gate" class="panel nickname-gate view">
+    <h1 class="game-title">SET</h1>
+    <p class="subtitle">Find the set before anyone else does.</p>
+    <label class="field-label" for="nickname-input">Your nickname</label>
+    <input id="nickname-input" class="text-input" type="text" maxlength="20" autocomplete="off" placeholder="e.g. Ada">
+    <button id="nickname-continue" class="btn btn-primary" type="button">Continue</button>
+    <p id="nickname-error" class="field-error" hidden></p>
+  </section>
+
+  <section id="lobby-picker" class="panel view private-entry" hidden>
+    <div class="hello-row">
+      <span>Playing as <strong id="hello-name"></strong></span>
+      <button id="change-name" class="link-btn" type="button">change</button>
+    </div>
+
+    <button id="create-room-btn" class="btn btn-primary" type="button">Create private game</button>
+    <p id="lobby-error" class="field-error" hidden></p>
+
+    <div class="join-by-code">
+      <h2 class="section-label">Join a private game</h2>
+      <p class="muted">Open a shared invite link, or enter the code from its host.</p>
+      <label class="field-label" for="room-code-input">Invite code</label>
+      <div class="code-entry-row">
+        <input id="room-code-input" class="text-input room-code-input" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="10" placeholder="ABCDE234FG">
+        <button id="join-room-btn" class="btn btn-secondary" type="button">Join</button>
+      </div>
+    </div>
+  </section>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/home.js') }}"></script>
+{% endblock %}

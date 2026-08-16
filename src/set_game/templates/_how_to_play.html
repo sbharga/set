@@ -1,0 +1,51 @@
+<div id="how-to-play-modal" class="modal-backdrop" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="htp-title">
+    <div class="modal-header">
+      <h2 id="htp-title">How to play</h2>
+      <button class="icon-btn" type="button" data-close-modal aria-label="Close">✕</button>
+    </div>
+    <div class="modal-body">
+      <p>Every card has four features. In a valid <strong>set</strong> of three cards, each feature must be
+      <strong>all the same</strong> or <strong>all different</strong> across the three cards &mdash; never
+      two matching and one different.</p>
+
+      <div class="htp-features">
+        <div><strong>Shape</strong><br>oval, diamond, squiggle</div>
+        <div><strong>Color</strong><br>red, green, purple</div>
+        <div><strong>Number</strong><br>one, two, three</div>
+        <div><strong>Shading</strong><br>solid, striped, open</div>
+      </div>
+
+      <div class="htp-example">
+        <div class="htp-example-block">
+          <div class="htp-label htp-label-good">✓ Valid set</div>
+          <div class="htp-cards" id="htp-valid-cards"></div>
+          <p class="htp-caption">Same shape, same color, every number different, every shading different.</p>
+        </div>
+        <div class="htp-example-block">
+          <div class="htp-label htp-label-bad">✗ Not a set</div>
+          <div class="htp-cards" id="htp-invalid-cards"></div>
+          <p class="htp-caption">Two cards are red and one is green &mdash; color is neither all same nor all different.</p>
+        </div>
+      </div>
+
+      <h3>Playing versus</h3>
+      <ul class="htp-rules">
+        <li>The board is shared. Everyone searches at once &mdash; there are no turns.</li>
+        <li>See a set? Press <strong>SET!</strong> The board locks to you alone for <strong>10 seconds</strong>.</li>
+        <li>Tap three cards. The third tap submits automatically.</li>
+        <li>Correct → <strong>+1 point</strong>, the cards vanish and are replaced.</li>
+        <li>Wrong, or time runs out → <strong>&minus;1 point</strong> and a 5 second cooldown before you can buzz again.</li>
+        <li>Think there's no set on the board at all? Press <strong>No Set</strong>. Right → <strong>+1 point</strong> and three more cards are dealt. Wrong → same penalty as a bad set.</li>
+        <li>The match ends when the deck runs out and no set remains on the board. Most sets wins.</li>
+      </ul>
+
+      <h3>Shortcuts</h3>
+      <ul class="htp-rules">
+        <li><kbd>space</kbd> &mdash; SET! (buzz)</li>
+        <li><kbd>N</kbd> &mdash; No Set</li>
+        <li><kbd>M</kbd> &mdash; mute / unmute sound</li>
+      </ul>
+    </div>
+  </div>
+</div>
