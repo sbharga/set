@@ -19,14 +19,18 @@
  * Math.random fallback, these are generated only from Web Crypto, available
  * under Render's mandatory HTTPS. The token is never sent to other players. */
 function generateSecureId() {
-  if (window.crypto && typeof window.crypto.randomUUID === "function") return window.crypto.randomUUID();
+  if (window.crypto && typeof window.crypto.randomUUID === "function")
+    return window.crypto.randomUUID();
   return null;
 }
 function generateSecureToken() {
-  if (!(window.crypto && typeof window.crypto.getRandomValues === "function")) return null;
+  if (!(window.crypto && typeof window.crypto.getRandomValues === "function"))
+    return null;
   const bytes = new Uint8Array(32);
   window.crypto.getRandomValues(bytes);
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
 }
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -48,7 +52,12 @@ document.addEventListener("DOMContentLoaded", () => {
     myPlayerId = generateSecureId();
     myPlayerToken = generateSecureToken();
     if (!myPlayerId || !myPlayerToken) {
-      root.replaceChildren(Object.assign(document.createElement("p"), { textContent: "This game needs a modern HTTPS browser to create a private player identity." }));
+      root.replaceChildren(
+        Object.assign(document.createElement("p"), {
+          textContent:
+            "This game needs a modern HTTPS browser to create a private player identity.",
+        }),
+      );
       return;
     }
     sessionStorage.setItem(PID_KEY, myPlayerId);
@@ -85,9 +94,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const revealFeaturesEl = document.getElementById("reveal-features");
   const revealCountdownEl = document.getElementById("reveal-countdown");
   const toastEl = document.getElementById("toast");
+  const gameStatusEl = document.getElementById("game-status");
+  const matchTitleEl = document.getElementById("match-title");
+  const connectionEl = document.getElementById("room-connection");
 
   const RING_CIRCUMFERENCE = 283; // 2 * pi * r45, matches the SVG circle
-  const REDUCED_MOTION = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const REDUCED_MOTION = window.matchMedia(
+    "(prefers-reduced-motion: reduce)",
+  ).matches;
 
   let hasJoined = false;
   let connectionReady = false;
@@ -128,7 +142,9 @@ document.addEventListener("DOMContentLoaded", () => {
         toastEl.hidden = true;
         toastEl._animationHandler = null;
       };
-      toastEl.addEventListener("animationend", toastEl._animationHandler, { once: true });
+      toastEl.addEventListener("animationend", toastEl._animationHandler, {
+        once: true,
+      });
     }, 3200);
   }
 
@@ -136,8 +152,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const socket = io();
 
+  function showConnection(label, state) {
+    if (!connectionEl) return;
+    connectionEl.textContent = label;
+    connectionEl.classList.toggle("is-live", state === "live");
+    connectionEl.classList.toggle("is-offline", state === "offline");
+  }
+
   socket.on("connect", () => {
     if (removedFromRoom) return;
+    showConnection("Syncing", "");
     // Stay read-only until the server answers with a fresh room snapshot.
     // Socket.IO may have reconnected after the board changed while this
     // tab was offline.
@@ -152,8 +176,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   socket.on("disconnect", () => {
     connectionReady = false;
+    showConnection("Reconnecting", "offline");
     updateControlsEnabled();
-    if (hasJoined) toast("Connection lost. Reconnecting…", "error");
+    if (hasJoined)
+      toast("Connection lost. We’re trying to reconnect…", "error");
   });
 
   socket.on("joined", () => {
@@ -187,7 +213,8 @@ document.addEventListener("DOMContentLoaded", () => {
       noSetNeeded = data.no_set_vote.needed;
     }
     if (latestSnapshot.phase === "lobby") renderWaitingView(latestSnapshot);
-    else if (latestSnapshot.phase === "playing") renderPlayers(latestSnapshot.players, latestSnapshot.buzz);
+    else if (latestSnapshot.phase === "playing")
+      renderPlayers(latestSnapshot.players, latestSnapshot.buzz);
     else renderGameOver(latestSnapshot);
   });
   socket.on("removed_from_room", (data) => {
@@ -233,15 +260,17 @@ document.addEventListener("DOMContentLoaded", () => {
     stopBuzzUI();
   });
 
+  function markCardSelected(card, selected) {
+    if (!card) return;
+    card.classList.toggle("selected", selected);
+    card.setAttribute("aria-pressed", String(selected));
+  }
+
   socket.on("card_selected", (data) => {
     const card = boardEl.querySelector(`.card[data-code="${data.card}"]`);
-    if (data.selected) {
-      selectedCodes.add(data.card);
-      if (card) card.classList.add("selected");
-    } else {
-      selectedCodes.delete(data.card);
-      if (card) card.classList.remove("selected");
-    }
+    if (data.selected) selectedCodes.add(data.card);
+    else selectedCodes.delete(data.card);
+    markCardSelected(card, data.selected);
     updateControlsEnabled();
     if (data.player_id === myPlayerId) SetAudio.click();
   });
@@ -268,7 +297,8 @@ document.addEventListener("DOMContentLoaded", () => {
   socket.on("no_set_vote", (data) => {
     noSetVoters = new Set(data.voters);
     noSetNeeded = data.needed;
-    if (latestSnapshot) renderPlayers(latestSnapshot.players, latestSnapshot.buzz);
+    if (latestSnapshot)
+      renderPlayers(latestSnapshot.players, latestSnapshot.buzz);
     updateControlsEnabled();
     if (data.player_id === myPlayerId) SetAudio.click();
   });
@@ -326,16 +356,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderSnapshot(snapshot) {
     connectionReady = true;
+    showConnection("Connected", "live");
     latestSnapshot = snapshot;
+    matchTitleEl.textContent = snapshot.title;
     const now = performance.now();
     syncLockoutDeadlines(snapshot.players, now);
     // Mid-reveal reconnect: we don't have the claimed cards to replay the
     // celebration, but we still must enforce the shared freeze so this
     // client can't buzz early -- reveal_remaining_ms carries the residual.
-    revealEndsAt = snapshot.reveal_remaining_ms > 0 ? now + snapshot.reveal_remaining_ms : 0;
+    revealEndsAt =
+      snapshot.reveal_remaining_ms > 0 ? now + snapshot.reveal_remaining_ms : 0;
     // Restore a pending no-set vote on (re)connect rather than resetting
     // to 0 -- the tally is room state, not something this client owns.
-    noSetVoters = new Set(snapshot.no_set_vote ? snapshot.no_set_vote.voters : []);
+    noSetVoters = new Set(
+      snapshot.no_set_vote ? snapshot.no_set_vote.voters : [],
+    );
     noSetNeeded = snapshot.no_set_vote ? snapshot.no_set_vote.needed : 0;
 
     if (snapshot.phase === "lobby") {
@@ -355,8 +390,10 @@ document.addEventListener("DOMContentLoaded", () => {
         });
         snapshot.buzz.selection.forEach((code) => selectedCodes.add(code));
         selectedCodes.forEach((code) => {
-          const el = boardEl.querySelector(`.card[data-code="${code}"]`);
-          if (el) el.classList.add("selected");
+          markCardSelected(
+            boardEl.querySelector(`.card[data-code="${code}"]`),
+            true,
+          );
         });
       } else {
         stopBuzzUI();
@@ -386,16 +423,21 @@ document.addEventListener("DOMContentLoaded", () => {
       const tags = [];
       if (p.is_host) tags.push('<span class="tag">HOST</span>');
       if (p.player_id === myPlayerId) tags.push('<span class="tag">YOU</span>');
-      if (!p.connected) tags.push('<span class="tag tag-offline">OFFLINE</span>');
-      const remove = isHost() && p.player_id !== myPlayerId
-        ? `<button class="kick-player link-btn" type="button" data-player-id="${p.player_id}" data-player-name="${escapeHtml(p.name)}">Remove</button>`
-        : "";
+      if (!p.connected)
+        tags.push('<span class="tag tag-offline">OFFLINE</span>');
+      const remove =
+        isHost() && p.player_id !== myPlayerId
+          ? `<button class="kick-player link-btn" type="button" data-player-id="${p.player_id}" data-player-name="${escapeHtml(p.name)}">Remove</button>`
+          : "";
       li.innerHTML = `<span class="row-title">${escapeHtml(p.name)}</span><span>${tags.join("")}${remove}</span>`;
       list.appendChild(li);
     });
-    document.getElementById("player-count").textContent = `${snapshot.players.length} / 8`;
+    document.getElementById("player-count").textContent =
+      `${snapshot.players.length} of 8`;
 
-    const activeCount = snapshot.players.filter((p) => p.connected && !p.spectator).length;
+    const activeCount = snapshot.players.filter(
+      (p) => p.connected && !p.spectator,
+    ).length;
     const startBtn = document.getElementById("start-game-btn");
     const hint = document.getElementById("start-hint");
     const spectatorNote = document.getElementById("spectator-note");
@@ -404,7 +446,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (isHost()) {
       startBtn.hidden = false;
       startBtn.disabled = activeCount < 2;
-      hint.textContent = activeCount < 2 ? "Need at least 2 players to start." : "";
+      hint.textContent =
+        activeCount < 2 ? "Need at least 2 players to start." : "";
     } else {
       startBtn.hidden = true;
       hint.textContent = "Waiting for the host to start the game…";
@@ -418,17 +461,29 @@ document.addEventListener("DOMContentLoaded", () => {
       tile.className = "player-tile";
       tile.dataset.playerId = p.player_id;
       if (p.spectator) tile.classList.add("spectator");
-      if (buzz && buzz.player_id === p.player_id) tile.classList.add("active-buzzer");
+      if (buzz && buzz.player_id === p.player_id)
+        tile.classList.add("active-buzzer");
       if (noSetVoters.has(p.player_id)) tile.classList.add("voted-no-set");
       const youTag = p.player_id === myPlayerId ? " (you)" : "";
-      const voteTag = noSetVoters.has(p.player_id) ? '<span class="tag tag-vote">NO SET</span>' : "";
-      const remove = isHost() && p.player_id !== myPlayerId
-        ? `<button class="kick-player icon-text-btn" type="button" data-player-id="${p.player_id}" data-player-name="${escapeHtml(p.name)}" aria-label="Remove ${escapeHtml(p.name)}">Remove</button>`
+      const voteTag = noSetVoters.has(p.player_id)
+        ? '<span class="tag tag-vote">NO SET</span>'
         : "";
+      const remove =
+        isHost() && p.player_id !== myPlayerId
+          ? `<button class="kick-player icon-text-btn" type="button" data-player-id="${p.player_id}" data-player-name="${escapeHtml(p.name)}" aria-label="Remove ${escapeHtml(p.name)}">Remove</button>`
+          : "";
       tile.innerHTML = `<span class="name">${escapeHtml(p.name)}${youTag}${p.spectator ? " · watching" : ""}${voteTag}</span><span class="score">${p.score}</span><span class="cooldown"></span>${remove}`;
-      if (!REDUCED_MOTION && lastScores[p.player_id] !== undefined && lastScores[p.player_id] !== p.score) {
+      if (
+        !REDUCED_MOTION &&
+        lastScores[p.player_id] !== undefined &&
+        lastScores[p.player_id] !== p.score
+      ) {
         tile.classList.add("score-bump");
-        tile.addEventListener("animationend", () => tile.classList.remove("score-bump"), { once: true });
+        tile.addEventListener(
+          "animationend",
+          () => tile.classList.remove("score-bump"),
+          { once: true },
+        );
       }
       lastScores[p.player_id] = p.score;
       playersEl.appendChild(tile);
@@ -444,7 +499,9 @@ document.addEventListener("DOMContentLoaded", () => {
     const now = performance.now();
     syncLockoutDeadlines(players, now);
     const byId = Object.fromEntries(players.map((p) => [p.player_id, p]));
-    latestSnapshot.players = latestSnapshot.players.map((p) => byId[p.player_id] || p);
+    latestSnapshot.players = latestSnapshot.players.map(
+      (p) => byId[p.player_id] || p,
+    );
     renderPlayers(latestSnapshot.players, latestSnapshot.buzz);
     updateControlsEnabled(now);
     ensureTicking();
@@ -453,14 +510,17 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderGameOver(snapshot) {
     const winners = snapshot.winner_ids.map((id) => nameForIn(snapshot, id));
     document.getElementById("winner-line").textContent =
-      winners.length > 1 ? `It's a tie: ${winners.join(" & ")}!` : `${winners[0]} wins!`;
+      winners.length > 1
+        ? `It's a tie: ${winners.join(" & ")}!`
+        : `${winners[0]} wins!`;
 
     const sorted = [...snapshot.players].sort((a, b) => b.score - a.score);
     const list = document.getElementById("standings-list");
     list.innerHTML = "";
     sorted.forEach((p) => {
       const li = document.createElement("li");
-      if (snapshot.winner_ids.includes(p.player_id)) li.classList.add("is-winner");
+      if (snapshot.winner_ids.includes(p.player_id))
+        li.classList.add("is-winner");
       li.innerHTML = `<span class="row-title">${escapeHtml(p.name)}</span><span class="row-meta">${p.score} ${snapshot.winner_ids.includes(p.player_id) ? "· WINNER" : ""}</span>`;
       list.appendChild(li);
     });
@@ -502,26 +562,51 @@ document.addEventListener("DOMContentLoaded", () => {
     const myDeadline = lockoutEndsAtByPlayer[myPlayerId] || 0;
     const lockoutMsLeft = Math.max(0, myDeadline - now);
     const lockedOut = lockoutMsLeft > 0;
-    let label = "SET!";
-    if (!connectionReady) label = "Reconnecting…";
-    else if (revealing) label = `Next round in ${Math.ceil(revealMsLeft / 1000)}s`;
-    else if (lockedOut) label = `Cooling down ${Math.ceil(lockoutMsLeft / 1000)}s`;
-    else if (buzzActive && latestSnapshot.buzz.player_id === myPlayerId && selectedCodes.size >= 3) label = "Checking…";
-    else if (buzzActive && latestSnapshot.buzz.player_id === myPlayerId) label = "Pick 3 cards";
-    else if (buzzActive) label = "Board locked";
+    let label = "I found a SET!";
+    let status = "Spot a set? Claim the board, then choose your three cards.";
+    if (!connectionReady) {
+      label = "Reconnecting…";
+      status = "Hold on — we’re syncing the latest cards.";
+    } else if (spectator) {
+      label = "Watching this match";
+      status = "You’re watching this round. You’ll join the next match.";
+    } else if (revealing) {
+      label = `Next round in ${Math.ceil(revealMsLeft / 1000)}s`;
+      status = "Nice find! Take a moment to see why those cards make a set.";
+    } else if (lockedOut) {
+      label = `Ready again in ${Math.ceil(lockoutMsLeft / 1000)}s`;
+      status = "Take a quick breather, then jump back in.";
+    } else if (
+      buzzActive &&
+      latestSnapshot.buzz.player_id === myPlayerId &&
+      selectedCodes.size >= 3
+    ) {
+      label = "Checking your set…";
+      status = "Checking those three cards…";
+    } else if (buzzActive && latestSnapshot.buzz.player_id === myPlayerId) {
+      const left = 3 - selectedCodes.size;
+      label = `Choose ${left} more card${left === 1 ? "" : "s"}`;
+      status = `The board is yours — choose ${left} more card${left === 1 ? "" : "s"}.`;
+    } else if (buzzActive) {
+      label = `${nameFor(latestSnapshot.buzz.player_id)} is choosing`;
+      status = `${nameFor(latestSnapshot.buzz.player_id)} claimed the board and is choosing three cards.`;
+    }
     // Voting isn't a claim, so a lockout doesn't block it -- only the
     // connection, spectating, and windows where the board could be about
     // to change out from under the vote (an active buzz or the reveal
     // freeze) do.
     const iVoted = noSetVoters.has(myPlayerId);
-    let voteLabel = "No Set";
-    if (noSetNeeded > 1 && noSetVoters.size > 0) voteLabel = `No Set ${noSetVoters.size}/${noSetNeeded}`;
+    let voteLabel = "No SET here";
+    if (noSetNeeded > 1 && noSetVoters.size > 0)
+      voteLabel = `No SET here · ${noSetVoters.size}/${noSetNeeded}`;
     return {
-      disabled: !connectionReady || spectator || revealing || buzzActive || lockedOut,
+      disabled:
+        !connectionReady || spectator || revealing || buzzActive || lockedOut,
       voteDisabled: !connectionReady || spectator || revealing || buzzActive,
       voteLabel,
       iVoted,
       label,
+      status,
       revealing,
       lockedOut,
       buzzActive,
@@ -538,6 +623,7 @@ document.addEventListener("DOMContentLoaded", () => {
     noSetBtn.classList.toggle("voted", state.iVoted);
     buzzLabelEl.textContent = state.label;
     noSetLabelEl.textContent = state.voteLabel;
+    gameStatusEl.textContent = state.status;
     updateBoardInteractivity();
   }
 
@@ -556,29 +642,38 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function updateLockoutTiles(now) {
-    playersEl.querySelectorAll(".player-tile[data-player-id]").forEach((tile) => {
-      const pid = tile.dataset.playerId;
-      const deadline = lockoutEndsAtByPlayer[pid];
-      const cooldownEl = tile.querySelector(".cooldown");
-      if (deadline && deadline > now) {
-        tile.classList.add("locked-out");
-        if (cooldownEl) cooldownEl.textContent = `${Math.ceil((deadline - now) / 1000)}s`;
-      } else {
-        tile.classList.remove("locked-out");
-        if (cooldownEl) cooldownEl.textContent = "";
-      }
-    });
+    playersEl
+      .querySelectorAll(".player-tile[data-player-id]")
+      .forEach((tile) => {
+        const pid = tile.dataset.playerId;
+        const deadline = lockoutEndsAtByPlayer[pid];
+        const cooldownEl = tile.querySelector(".cooldown");
+        if (deadline && deadline > now) {
+          tile.classList.add("locked-out");
+          if (cooldownEl)
+            cooldownEl.textContent = `${Math.ceil((deadline - now) / 1000)}s`;
+        } else {
+          tile.classList.remove("locked-out");
+          if (cooldownEl) cooldownEl.textContent = "";
+        }
+      });
   }
 
   function updateBuzzRing(now) {
     const left = Math.max(0, buzzDeadline - now);
     const fraction = buzzDurationMs ? Math.min(1, left / buzzDurationMs) : 0;
-    buzzRingProgress.style.strokeDashoffset = String(RING_CIRCUMFERENCE * (1 - fraction));
+    buzzRingProgress.style.strokeDashoffset = String(
+      RING_CIRCUMFERENCE * (1 - fraction),
+    );
     const urgent = left <= 3000;
     buzzRingProgress.classList.toggle("urgent", urgent);
     const wholeSecond = Math.ceil(left / 1000);
     railTimerSeconds.textContent = wholeSecond;
-    if (wholeSecond !== lastWholeSecond && wholeSecond <= 3 && wholeSecond > 0) {
+    if (
+      wholeSecond !== lastWholeSecond &&
+      wholeSecond <= 3 &&
+      wholeSecond > 0
+    ) {
       SetAudio.tick(true);
     }
     lastWholeSecond = wholeSecond;
@@ -590,7 +685,8 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     const left = Math.max(0, revealEndsAt - now);
-    revealCountdownEl.textContent = left > 0 ? `Back in ${Math.ceil(left / 1000)}s` : "";
+    revealCountdownEl.textContent =
+      left > 0 ? `Back in ${Math.ceil(left / 1000)}s` : "";
   }
 
   function anyTimersActive(now) {
@@ -615,12 +711,16 @@ document.addEventListener("DOMContentLoaded", () => {
       updateLockoutTiles(now);
       updateRevealCountdownText(now);
       if (anyTimersActive(now)) {
-        tickHandle = REDUCED_MOTION ? setTimeout(run, 250) : requestAnimationFrame(run);
+        tickHandle = REDUCED_MOTION
+          ? setTimeout(run, 250)
+          : requestAnimationFrame(run);
       } else {
         tickHandle = null;
       }
     };
-    tickHandle = REDUCED_MOTION ? setTimeout(run, 0) : requestAnimationFrame(run);
+    tickHandle = REDUCED_MOTION
+      ? setTimeout(run, 0)
+      : requestAnimationFrame(run);
   }
 
   // --- board rendering + FLIP animation ---------------------------------
@@ -632,7 +732,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function syncBoard(cards, enterCodes) {
     const enterSet = new Set(enterCodes || []);
     const existing = new Map();
-    boardEl.querySelectorAll(".card").forEach((el) => existing.set(Number(el.dataset.code), el));
+    boardEl
+      .querySelectorAll(".card")
+      .forEach((el) => existing.set(Number(el.dataset.code), el));
 
     const firstRects = new Map();
     if (!REDUCED_MOTION) {
@@ -657,11 +759,14 @@ document.addEventListener("DOMContentLoaded", () => {
           // The animation fills forward (holds its end transform) until
           // this class is removed -- left in place, it would permanently
           // pin transform to identity and block .selected's own lift.
-          el.addEventListener("animationend", () => el.classList.remove("card-enter"), { once: true });
+          el.addEventListener(
+            "animationend",
+            () => el.classList.remove("card-enter"),
+            { once: true },
+          );
         }
       }
-      if (selectedCodes.has(card.code)) el.classList.add("selected");
-      else el.classList.remove("selected");
+      markCardSelected(el, selectedCodes.has(card.code));
       if (cursor) cursor.after(el);
       else boardEl.prepend(el);
       cursor = el;
@@ -672,8 +777,14 @@ document.addEventListener("DOMContentLoaded", () => {
       const deckRect = railDeckEl.getBoundingClientRect();
       boardEl.querySelectorAll(".card-enter").forEach((el) => {
         const r = el.getBoundingClientRect();
-        el.style.setProperty("--deal-x", `${deckRect.left + deckRect.width / 2 - (r.left + r.width / 2)}px`);
-        el.style.setProperty("--deal-y", `${deckRect.top + deckRect.height / 2 - (r.top + r.height / 2)}px`);
+        el.style.setProperty(
+          "--deal-x",
+          `${deckRect.left + deckRect.width / 2 - (r.left + r.width / 2)}px`,
+        );
+        el.style.setProperty(
+          "--deal-y",
+          `${deckRect.top + deckRect.height / 2 - (r.top + r.height / 2)}px`,
+        );
       });
 
       // FLIP the survivors: invert the just-applied layout change with a
@@ -691,7 +802,11 @@ document.addEventListener("DOMContentLoaded", () => {
         el.style.setProperty("--flip-y", `${dy}px`);
         el.classList.add("card-flip", "card-flip-start");
         requestAnimationFrame(() => el.classList.remove("card-flip-start"));
-        el.addEventListener("transitionend", () => el.classList.remove("card-flip"), { once: true });
+        el.addEventListener(
+          "transitionend",
+          () => el.classList.remove("card-flip"),
+          { once: true },
+        );
       });
     }
     updateBoardInteractivity();
@@ -707,7 +822,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const el = boardEl.querySelector(`.card[data-code="${card.code}"]`);
       if (!el) return;
       pending++;
-      el.classList.remove("selected");
+      markCardSelected(el, false);
       el.style.animationDelay = REDUCED_MOTION ? "0ms" : `${i * 60}ms`;
       el.classList.add("card-vanish");
       el.addEventListener(
@@ -716,7 +831,7 @@ document.addEventListener("DOMContentLoaded", () => {
           pending--;
           if (pending === 0) syncBoard(newBoard, addedCodes);
         },
-        { once: true }
+        { once: true },
       );
     });
     if (pending === 0) syncBoard(newBoard, addedCodes);
@@ -727,7 +842,14 @@ document.addEventListener("DOMContentLoaded", () => {
       const el = boardEl.querySelector(`.card[data-code="${code}"]`);
       if (!el) return;
       el.classList.add("card-invalid");
-      el.addEventListener("animationend", () => el.classList.remove("card-invalid", "selected"), { once: true });
+      el.addEventListener(
+        "animationend",
+        () => {
+          el.classList.remove("card-invalid");
+          markCardSelected(el, false);
+        },
+        { once: true },
+      );
     });
   }
 
@@ -737,7 +859,8 @@ document.addEventListener("DOMContentLoaded", () => {
    * Space-to-buzz shortcut). */
   function trySelectCard(cardEl) {
     if (!cardEl || cardEl.classList.contains("card-vanish")) return false;
-    const amBuzzer = latestSnapshot?.buzz && latestSnapshot.buzz.player_id === myPlayerId;
+    const amBuzzer =
+      latestSnapshot?.buzz && latestSnapshot.buzz.player_id === myPlayerId;
     if (!amBuzzer) return false;
     socket.emit("select_card", { card: Number(cardEl.dataset.code) });
     return true;
@@ -784,6 +907,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const el = buildCardElement(c);
       el.tabIndex = -1;
       el.removeAttribute("role");
+      el.removeAttribute("aria-pressed");
       revealCardsEl.appendChild(el);
     });
 
@@ -841,7 +965,8 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
       if (!controlsState(performance.now()).disabled) socket.emit("buzz");
     } else if (e.key.toLowerCase() === "n") {
-      if (!controlsState(performance.now()).voteDisabled) socket.emit("vote_no_set");
+      if (!controlsState(performance.now()).voteDisabled)
+        socket.emit("vote_no_set");
     }
   });
 
@@ -858,8 +983,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
   buzzBtn.addEventListener("click", () => socket.emit("buzz"));
   noSetBtn.addEventListener("click", () => socket.emit("vote_no_set"));
-  document.getElementById("start-game-btn").addEventListener("click", () => socket.emit("start_game"));
-  document.getElementById("play-again-btn").addEventListener("click", () => socket.emit("play_again"));
+  document
+    .getElementById("start-game-btn")
+    .addEventListener("click", () => socket.emit("start_game"));
+  document
+    .getElementById("play-again-btn")
+    .addEventListener("click", () => socket.emit("play_again"));
 
   const copyLinkBtn = document.getElementById("copy-link-btn");
   const manualCopyEl = document.getElementById("manual-copy");
@@ -891,7 +1020,9 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         await Promise.race([
           navigator.clipboard.writeText(text),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("clipboard timeout")), 700)),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("clipboard timeout")), 700),
+          ),
         ]);
         return true;
       } catch {

@@ -21,9 +21,10 @@ from __future__ import annotations
 import hashlib
 import hmac
 import re
-from collections import deque
 import threading
 import time
+from collections import deque
+from typing import Protocol, cast
 
 from flask import request
 from flask_socketio import emit
@@ -59,8 +60,22 @@ _action_windows: dict[str, deque[float]] = {}
 MAX_MUTATIONS_PER_SECOND = 30
 
 
+class _SocketIORequest(Protocol):
+    sid: str
+
+
+def _request_sid() -> str:
+    """Return Flask-SocketIO's request-scoped session identifier."""
+    return cast(_SocketIORequest, request).sid
+
+
 def _now() -> float:
     return time.monotonic()
+
+
+def _socketio_sleep(seconds: float) -> None:
+    """Sleep through Socket.IO; its third-party stub incorrectly requires int."""
+    socketio.sleep(seconds)  # type: ignore[arg-type]
 
 
 PLAYER_ID_RE = re.compile(r"^[A-Za-z0-9_-]{16,128}$")
@@ -76,7 +91,9 @@ def _text_field(data: object, key: str) -> str:
 
 
 def _valid_name(name: str) -> bool:
-    return 1 <= len(name) <= 20 and all(char.isprintable() and char not in "\r\n\t" for char in name)
+    return 1 <= len(name) <= 20 and all(
+        char.isprintable() and char not in "\r\n\t" for char in name
+    )
 
 
 def _credential_digest(token: str) -> str:
@@ -99,7 +116,10 @@ def _players_payload(game: Game, now: float) -> dict:
     return {
         "players": [p.to_dict(now) for p in game.players.values()],
         "winner_ids": list(game.winner_ids),
-        "no_set_vote": {"voters": sorted(game.no_set_votes), "needed": game.no_set_votes_needed()},
+        "no_set_vote": {
+            "voters": sorted(game.no_set_votes),
+            "needed": game.no_set_votes_needed(),
+        },
     }
 
 
@@ -122,7 +142,7 @@ def _error(message: str) -> None:
 
 
 def _mutation_allowed() -> bool:
-    if _allow_mutation(request.sid):
+    if _allow_mutation(_request_sid()):
         return True
     _error("Too many actions. Please slow down.")
     return False
@@ -134,7 +154,9 @@ def _card(code: int) -> dict:
     return Card.from_code(code).to_dict()
 
 
-def _emit_no_set_vote(game: Game, now: float, *, player_id: str | None = None, voted: bool | None = None) -> None:
+def _emit_no_set_vote(
+    game: Game, now: float, *, player_id: str | None = None, voted: bool | None = None
+) -> None:
     socketio.emit(
         "no_set_vote",
         {
@@ -147,7 +169,9 @@ def _emit_no_set_vote(game: Game, now: float, *, player_id: str | None = None, v
     )
 
 
-def _emit_no_set_pass(game: Game, now: float, board_before: list[int], result: str) -> None:
+def _emit_no_set_pass(
+    game: Game, now: float, board_before: list[int], result: str
+) -> None:
     """Emits the follow-up event for a no-set vote that just went unanimous
     -- shared by the direct vote handler and the "settle" re-check below."""
     if result == "passed-dealt":
@@ -203,7 +227,9 @@ def on_join_room(data):
 
     if not _valid_name(name):
         return _error("Enter a nickname using up to 20 printable characters.")
-    if not PLAYER_ID_RE.fullmatch(player_id) or not PLAYER_TOKEN_RE.fullmatch(player_token):
+    if not PLAYER_ID_RE.fullmatch(player_id) or not PLAYER_TOKEN_RE.fullmatch(
+        player_token
+    ):
         return _error("Invalid player credentials. Refresh the page and try again.")
     if not is_valid_room_code(room_code):
         return _error("That invite code is invalid.")
@@ -213,7 +239,7 @@ def on_join_room(data):
         return _error("This private game no longer exists.")
 
     auth_digest = _credential_digest(player_token)
-    sid = request.sid
+    sid = _request_sid()
     with _membership_lock:
         with game.lock:
             existing = game.players.get(player_id)
@@ -246,7 +272,7 @@ def on_join_room(data):
 
 @socketio.on("disconnect")
 def on_disconnect():
-    sid = request.sid
+    sid = _request_sid()
     with _action_rate_lock:
         _action_windows.pop(sid, None)
     with _membership_lock:
@@ -269,7 +295,9 @@ def on_disconnect():
         # emit the granular state transition rather than re-sending a board.
         socketio.emit("buzz_ended", {}, to=room_code)
     if lockout_deadline is not None:
-        socketio.start_background_task(_watch_lockout, room_code, player_id, lockout_deadline)
+        socketio.start_background_task(
+            _watch_lockout, room_code, player_id, lockout_deadline
+        )
     # mark_disconnected() already dropped this player's own vote; the
     # departure may also have shrunk the electorate enough to make a
     # still-pending vote from the remaining players unanimous.
@@ -281,7 +309,8 @@ def on_kick_player(data):
     """Allow the current host to permanently remove another room identity."""
     if not _mutation_allowed():
         return
-    found = _require_room(request.sid)
+    sid = _request_sid()
+    found = _require_room(sid)
     if not found:
         return
     game, host_id = found
@@ -295,7 +324,7 @@ def on_kick_player(data):
         # Re-check membership while holding the same lock used by reconnect
         # and disconnect, so a stale host socket cannot kick after it lost
         # its seat to a newer tab.
-        if _sid_index.get(request.sid) != (game.room_code, host_id):
+        if _sid_index.get(sid) != (game.room_code, host_id):
             return _error("You are no longer in this game.")
         with game.lock:
             host = game.players.get(host_id)
@@ -306,12 +335,16 @@ def on_kick_player(data):
                 return _error("That player is no longer in this game.")
             target_sid = target.sid if target.connected else None
             was_buzzing = bool(game.buzz and game.buzz.player_id == target_id)
-            removed = game.remove_player(target_id)
+            game.remove_player(target_id)
         if target_sid:
             _sid_index.pop(target_sid, None)
 
     if target_sid:
-        socketio.emit("removed_from_room", {"message": "You were removed by the host."}, to=target_sid)
+        socketio.emit(
+            "removed_from_room",
+            {"message": "You were removed by the host."},
+            to=target_sid,
+        )
         socketio.server.disconnect(target_sid, namespace="/")
     _emit_players_updated(game, _now())
     if was_buzzing:
@@ -340,7 +373,7 @@ def _require_room(sid: str) -> tuple[Game, str] | None:
 def on_start_game():
     if not _mutation_allowed():
         return
-    found = _require_room(request.sid)
+    found = _require_room(_request_sid())
     if not found:
         return
     game, player_id = found
@@ -363,7 +396,7 @@ def on_start_game():
 def on_play_again():
     if not _mutation_allowed():
         return
-    found = _require_room(request.sid)
+    found = _require_room(_request_sid())
     if not found:
         return
     game, player_id = found
@@ -386,7 +419,7 @@ def on_play_again():
 def on_buzz():
     if not _mutation_allowed():
         return
-    found = _require_room(request.sid)
+    found = _require_room(_request_sid())
     if not found:
         return
     game, player_id = found
@@ -409,12 +442,14 @@ def on_buzz():
         },
         to=game.room_code,
     )
-    socketio.start_background_task(_watch_buzz_timeout, game.room_code, player_id, buzz.deadline)
+    socketio.start_background_task(
+        _watch_buzz_timeout, game.room_code, player_id, buzz.deadline
+    )
 
 
 def _watch_buzz_timeout(room_code: str, player_id: str, deadline: float) -> None:
     delay = max(0.0, deadline - _now())
-    socketio.sleep(delay)  # deliberately outside any lock -- this is a real wait
+    _socketio_sleep(delay)  # deliberately outside any lock -- this is a real wait
     game = registry.get(room_code)
     if not game:
         return
@@ -436,7 +471,9 @@ def _watch_buzz_timeout(room_code: str, player_id: str, deadline: float) -> None
         )
         socketio.emit("buzz_ended", {}, to=room_code)
         if lockout_deadline is not None:
-            socketio.start_background_task(_watch_lockout, room_code, player_id, lockout_deadline)
+            socketio.start_background_task(
+                _watch_lockout, room_code, player_id, lockout_deadline
+            )
         # The buzz that was blocking any pending no-set vote just ended.
         _settle_no_set_vote(game, _now())
 
@@ -453,7 +490,7 @@ def _watch_lockout(room_code: str, player_id: str, deadline: float) -> None:
     here (the later timer will announce it instead).
     """
     delay = max(0.0, deadline - _now())
-    socketio.sleep(delay)
+    _socketio_sleep(delay)
     game = registry.get(room_code)
     if not game:
         return
@@ -465,14 +502,18 @@ def _watch_lockout(room_code: str, player_id: str, deadline: float) -> None:
             players_payload = [p.to_dict(now) for p in game.players.values()]
 
     if acted:
-        socketio.emit("cooldown_ended", {"player_id": player_id, "players": players_payload}, to=room_code)
+        socketio.emit(
+            "cooldown_ended",
+            {"player_id": player_id, "players": players_payload},
+            to=room_code,
+        )
 
 
 def _watch_reveal(room_code: str, deadline: float) -> None:
     """Announces when the shared set-reveal freeze has ended, so every
     client (finder included) re-enables its buttons at the same instant."""
     delay = max(0.0, deadline - _now())
-    socketio.sleep(delay)
+    _socketio_sleep(delay)
     game = registry.get(room_code)
     if not game:
         return
@@ -491,7 +532,7 @@ def _watch_reveal(room_code: str, deadline: float) -> None:
 def on_select_card(data):
     if not _mutation_allowed():
         return
-    found = _require_room(request.sid)
+    found = _require_room(_request_sid())
     if not found:
         return
     game, player_id = found
@@ -517,13 +558,24 @@ def on_select_card(data):
             )
             if result == "selection-complete":
                 expected_cards = tuple(game.buzz.selection)
-                replacement_deadline = game.buzz.deadline if game.buzz.deadline != original_deadline else None
-                preview_task = (game.room_code, player_id, expected_cards, replacement_deadline)
+                replacement_deadline = (
+                    game.buzz.deadline
+                    if game.buzz.deadline != original_deadline
+                    else None
+                )
+                preview_task = (
+                    game.room_code,
+                    player_id,
+                    expected_cards,
+                    replacement_deadline,
+                )
         else:
             _error(f"Can't select: {result}.")
 
     if preview_task:
-        room_code, preview_player_id, expected_cards, replacement_deadline = preview_task
+        room_code, preview_player_id, expected_cards, replacement_deadline = (
+            preview_task
+        )
         socketio.start_background_task(
             _resolve_selection_after_preview,
             room_code,
@@ -546,7 +598,7 @@ def _resolve_selection_after_preview(
     player_id: str,
     expected_cards: tuple[int, int, int],
 ) -> None:
-    socketio.sleep(SELECTION_PREVIEW_SECONDS)
+    _socketio_sleep(SELECTION_PREVIEW_SECONDS)
     game = registry.get(room_code)
     if not game:
         return
@@ -568,7 +620,9 @@ def _resolve_selection_after_preview(
                 "players": [p.to_dict(now) for p in game.players.values()],
                 "reveal_ms": max(0, int((reveal_deadline - now) * 1000)),
             }
-            game_over_payload = game.snapshot(now) if game.phase == Phase.FINISHED else None
+            game_over_payload = (
+                game.snapshot(now) if game.phase == Phase.FINISHED else None
+            )
         elif result == "resolved-invalid":
             lockout_deadline = game.players[player_id].lockout_until
             payload = {
@@ -589,7 +643,9 @@ def _resolve_selection_after_preview(
     else:
         socketio.emit("set_rejected", payload, to=room_code)
         socketio.emit("buzz_ended", {}, to=room_code)
-        socketio.start_background_task(_watch_lockout, room_code, player_id, lockout_deadline)
+        socketio.start_background_task(
+            _watch_lockout, room_code, player_id, lockout_deadline
+        )
         # The buzz that was blocking any pending no-set vote just ended.
         # (The valid-set branch clears votes outright, so it needs no
         # equivalent -- there is nothing left to settle.)
@@ -603,7 +659,7 @@ def on_vote_no_set():
     the deck is empty) -- see Game.toggle_no_set_vote for the rules."""
     if not _mutation_allowed():
         return
-    found = _require_room(request.sid)
+    found = _require_room(_request_sid())
     if not found:
         return
     game, player_id = found
@@ -642,7 +698,10 @@ def start_background_reaper(sio) -> None:
                     continue
                 with game.lock:
                     removed = game.drop_stale_disconnects(now)
-                    is_empty = not game.players and (now - game.created_at) > ROOM_CREATION_GRACE_SECONDS
+                    is_empty = (
+                        not game.players
+                        and (now - game.created_at) > ROOM_CREATION_GRACE_SECONDS
+                    )
                 if removed:
                     _emit_players_updated(game, now)
                 if is_empty:

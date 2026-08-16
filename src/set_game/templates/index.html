@@ -1,41 +1,122 @@
 {% extends "base.html" %}
-{% block title %}SET{% endblock %}
+{% block title %}SET — Spot the pattern{% endblock %}
 
 {% block content %}
-<div class="home">
-
-  <section id="nickname-gate" class="panel nickname-gate view">
-    <h1 class="game-title">SET</h1>
-    <p class="subtitle">Find the set before anyone else does.</p>
-    <label class="field-label" for="nickname-input">Your nickname</label>
-    <input id="nickname-input" class="text-input" type="text" maxlength="20" autocomplete="off" placeholder="e.g. Ada">
-    <button id="nickname-continue" class="btn btn-primary" type="button">Continue</button>
-    <p id="nickname-error" class="field-error" hidden></p>
-  </section>
-
-  <section id="lobby-picker" class="panel view private-entry" hidden>
-    <div class="hello-row">
-      <span>Playing as <strong id="hello-name"></strong></span>
-      <button id="change-name" class="link-btn" type="button">change</button>
-    </div>
-
-    <button id="create-room-btn" class="btn btn-primary" type="button">Create private game</button>
-    <p id="lobby-error" class="field-error" hidden></p>
-
-    <div class="join-by-code">
-      <h2 class="section-label">Join a private game</h2>
-      <p class="muted">Open a shared invite link, or enter the code from its host.</p>
-      <label class="field-label" for="room-code-input">Invite code</label>
-      <div class="code-entry-row">
-        <input id="room-code-input" class="text-input room-code-input" type="text" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="10" placeholder="ABCDE234FG">
-        <button id="join-room-btn" class="btn btn-secondary" type="button">Join</button>
+  <div class="home">
+    <section class="home-hero" aria-labelledby="home-title">
+      <div class="hero-cards" aria-hidden="true">
+        <span class="hero-card hero-card-one"><i></i></span>
+        <span class="hero-card hero-card-two"><i></i><i></i></span>
+        <span class="hero-card hero-card-three"><i></i><i></i><i></i></span>
       </div>
-    </div>
-  </section>
+      <h1 id="home-title" class="home-title">
+        Find it. Call it. <em>SET!</em>
+      </h1>
+      <p class="home-lede">
+        Fast eyes, clever patterns, and friendly competition. Easy to learn,
+        delightfully tricky to master.
+      </p>
+    </section>
 
-</div>
+    <section
+      id="nickname-gate"
+      class="panel nickname-gate home-step view"
+      aria-labelledby="nickname-title"
+    >
+      <h2 id="nickname-title">What should we call you?</h2>
+      <label class="field-label visually-hidden" for="nickname-input"
+        >Your nickname</label
+      >
+      <input
+        id="nickname-input"
+        class="text-input"
+        type="text"
+        maxlength="20"
+        autocomplete="nickname"
+        enterkeyhint="go"
+        placeholder="Type your nickname"
+        aria-describedby="nickname-help nickname-error"
+      />
+      <p id="nickname-help" class="field-help">
+        This is the name your friends will see.
+      </p>
+      <button
+        id="nickname-continue"
+        class="btn btn-primary btn-wide"
+        type="button"
+      >
+        Save name &amp; continue
+      </button>
+      <p id="nickname-error" class="field-error" role="alert" hidden></p>
+    </section>
+
+    <section
+      id="lobby-picker"
+      class="panel view home-step"
+      hidden
+      aria-labelledby="ready-title"
+    >
+      <div class="hello-row">
+        <span>Playing as <strong id="hello-name"></strong></span>
+        <button id="change-name" class="link-btn" type="button">
+          Change name
+        </button>
+      </div>
+
+      <div class="section-heading-row lobby-heading">
+        <h2 id="ready-title">Bring your friends together</h2>
+        <span id="home-connection" class="connection-status" aria-live="polite"
+          >Connecting</span
+        >
+      </div>
+
+      <button
+        id="create-room-btn"
+        class="btn btn-primary btn-wide"
+        type="button"
+        disabled
+      >
+        Host a new game
+      </button>
+      <p class="field-help">
+        You’ll get a private link to share with everyone.
+      </p>
+      <p id="lobby-error" class="field-error" role="alert" hidden></p>
+
+      <div class="join-by-code">
+        <h3>Have an invite?</h3>
+        <p class="muted">Paste the 10-character code your host shared.</p>
+        <label class="field-label" for="room-code-input"
+          >Game invite code</label
+        >
+        <div class="code-entry-row">
+          <input
+            id="room-code-input"
+            class="text-input room-code-input"
+            type="text"
+            inputmode="text"
+            autocomplete="off"
+            autocapitalize="characters"
+            spellcheck="false"
+            maxlength="10"
+            enterkeyhint="go"
+            placeholder="ABCDE234FG"
+            aria-describedby="lobby-error"
+          />
+          <button
+            id="join-room-btn"
+            class="btn btn-secondary"
+            type="button"
+            disabled
+          >
+            Join game
+          </button>
+        </div>
+      </div>
+    </section>
+  </div>
 {% endblock %}
 
 {% block scripts %}
-<script src="{{ url_for('static', filename='js/home.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/home.js') }}"></script>
 {% endblock %}

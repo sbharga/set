@@ -22,7 +22,9 @@ CODE_LENGTH = 10
 
 
 def is_valid_room_code(room_code: str) -> bool:
-    return len(room_code) == CODE_LENGTH and all(char in CODE_ALPHABET for char in room_code)
+    return len(room_code) == CODE_LENGTH and all(
+        char in CODE_ALPHABET for char in room_code
+    )
 
 
 class RoomRegistry:

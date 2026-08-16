@@ -9,14 +9,44 @@ document.addEventListener("DOMContentLoaded", () => {
   if (!modal || !openBtn) return;
 
   const validExample = [
-    { code: "ex-v1", shape: "diamond", color: "red", number: 1, shading: "solid" },
-    { code: "ex-v2", shape: "diamond", color: "red", number: 2, shading: "striped" },
-    { code: "ex-v3", shape: "diamond", color: "red", number: 3, shading: "open" },
+    {
+      code: "ex-v1",
+      shape: "diamond",
+      color: "red",
+      number: 1,
+      shading: "solid",
+    },
+    {
+      code: "ex-v2",
+      shape: "diamond",
+      color: "red",
+      number: 2,
+      shading: "striped",
+    },
+    {
+      code: "ex-v3",
+      shape: "diamond",
+      color: "red",
+      number: 3,
+      shading: "open",
+    },
   ];
   const invalidExample = [
     { code: "ex-i1", shape: "oval", color: "red", number: 1, shading: "solid" },
-    { code: "ex-i2", shape: "diamond", color: "red", number: 2, shading: "solid" },
-    { code: "ex-i3", shape: "squiggle", color: "green", number: 3, shading: "solid" },
+    {
+      code: "ex-i2",
+      shape: "diamond",
+      color: "red",
+      number: 2,
+      shading: "solid",
+    },
+    {
+      code: "ex-i3",
+      shape: "squiggle",
+      color: "green",
+      number: 3,
+      shading: "solid",
+    },
   ];
 
   // These are illustrative only (not real board cards), so strip the
@@ -26,6 +56,8 @@ document.addEventListener("DOMContentLoaded", () => {
     const el = buildCardElement(card);
     el.tabIndex = -1;
     el.removeAttribute("role");
+    el.removeAttribute("aria-pressed");
+    el.removeAttribute("aria-label");
     return el;
   }
 
@@ -57,7 +89,9 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
     if (e.key !== "Tab") return;
-    const focusable = modal.querySelectorAll("button, [href], input, [tabindex]:not([tabindex='-1'])");
+    const focusable = modal.querySelectorAll(
+      "button, [href], input, [tabindex]:not([tabindex='-1'])",
+    );
     if (!focusable.length) return;
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
@@ -74,5 +108,7 @@ document.addEventListener("DOMContentLoaded", () => {
   modal.addEventListener("click", (e) => {
     if (e.target === modal) close();
   });
-  modal.querySelectorAll("[data-close-modal]").forEach((b) => b.addEventListener("click", close));
+  modal
+    .querySelectorAll("[data-close-modal]")
+    .forEach((b) => b.addEventListener("click", close));
 });

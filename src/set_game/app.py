@@ -17,7 +17,7 @@ from .rooms import is_valid_room_code
 # need explicit locking -- see the concurrency note in game.py.
 # `None` accepts only same-origin Socket.IO requests. Render terminates TLS
 # before the app; ProxyFix below restores the original scheme/host safely.
-socketio = SocketIO(async_mode="threading", cors_allowed_origins=None)
+socketio = SocketIO(async_mode="threading")
 
 
 def create_app() -> Flask:
@@ -32,7 +32,11 @@ def create_app() -> Flask:
     # Only trust forwarded headers when deployed behind Render's proxy; doing
     # so for a directly exposed development server would trust client input.
     if production:
-        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
+        # Flask documents this assignment, but its type declaration exposes
+        # wsgi_app as a method rather than replaceable WSGI middleware.
+        app.wsgi_app = ProxyFix(  # type: ignore[method-assign]
+            app.wsgi_app, x_for=1, x_proto=1, x_host=1
+        )
 
     socketio.init_app(app)
 
@@ -47,11 +51,13 @@ def create_app() -> Flask:
         response.headers.setdefault("Referrer-Policy", "no-referrer")
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("X-Frame-Options", "DENY")
-        response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        response.headers.setdefault(
+            "Permissions-Policy", "camera=(), microphone=(), geolocation=()"
+        )
         return response
 
     # Importing registers the Socket.IO event handlers on `socketio`.
-    from . import events  # noqa: F401
+    from . import events
 
     @app.get("/")
     def index():
@@ -75,7 +81,9 @@ def create_app() -> Flask:
 
 def run(host: str | None = None, port: int | None = None) -> None:
     if os.environ.get("SET_ENV") == "production":
-        raise RuntimeError("Use the configured Gunicorn command in production, not main.py.")
+        raise RuntimeError(
+            "Use the configured Gunicorn command in production, not main.py."
+        )
     host = host if host is not None else os.environ.get("SET_HOST", "0.0.0.0")
     port = port if port is not None else int(os.environ.get("SET_PORT", "5000"))
     app = create_app()

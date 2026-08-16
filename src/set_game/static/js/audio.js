@@ -5,7 +5,12 @@
 
 const SetAudio = (() => {
   let ctx = null;
-  let muted = localStorage.getItem("set_muted") === "1";
+  let muted = false;
+  try {
+    muted = localStorage.getItem("set_muted") === "1";
+  } catch (_error) {
+    // Sound still works when browser storage is unavailable.
+  }
 
   function ensureContext() {
     if (!ctx) {
@@ -24,7 +29,12 @@ const SetAudio = (() => {
   window.addEventListener("pointerdown", unlock, { once: true });
   window.addEventListener("keydown", unlock, { once: true });
 
-  function tone(freq, startOffset, duration, { type = "sine", gain = 0.18, glideTo = null } = {}) {
+  function tone(
+    freq,
+    startOffset,
+    duration,
+    { type = "sine", gain = 0.18, glideTo = null } = {},
+  ) {
     if (muted) return;
     const c = ensureContext();
     const t0 = c.currentTime + startOffset;
@@ -32,7 +42,8 @@ const SetAudio = (() => {
     const g = c.createGain();
     osc.type = type;
     osc.frequency.setValueAtTime(freq, t0);
-    if (glideTo) osc.frequency.exponentialRampToValueAtTime(glideTo, t0 + duration);
+    if (glideTo)
+      osc.frequency.exponentialRampToValueAtTime(glideTo, t0 + duration);
     g.gain.setValueAtTime(0.0001, t0);
     g.gain.exponentialRampToValueAtTime(gain, t0 + 0.015);
     g.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
@@ -68,7 +79,11 @@ const SetAudio = (() => {
     isMuted: () => muted,
     setMuted(value) {
       muted = value;
-      localStorage.setItem("set_muted", value ? "1" : "0");
+      try {
+        localStorage.setItem("set_muted", value ? "1" : "0");
+      } catch (_error) {
+        // Keep the preference for this page when storage is unavailable.
+      }
     },
     click() {
       tone(720, 0, 0.06, { type: "square", gain: 0.08 });
@@ -81,7 +96,9 @@ const SetAudio = (() => {
       tone(urgent ? 1000 : 800, 0, 0.05, { type: "square", gain: 0.07 });
     },
     validSet() {
-      [523.25, 659.25, 783.99].forEach((f, i) => tone(f, i * 0.07, 0.22, { type: "sine", gain: 0.16 }));
+      [523.25, 659.25, 783.99].forEach((f, i) =>
+        tone(f, i * 0.07, 0.22, { type: "sine", gain: 0.16 }),
+      );
     },
     invalidSet() {
       tone(220, 0, 0.28, { type: "sawtooth", gain: 0.14, glideTo: 110 });
@@ -90,7 +107,9 @@ const SetAudio = (() => {
       noiseWhoosh(0, 0.22);
     },
     gameOver() {
-      [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, i * 0.12, 0.3, { type: "sine", gain: 0.15 }));
+      [523.25, 659.25, 783.99, 1046.5].forEach((f, i) =>
+        tone(f, i * 0.12, 0.3, { type: "sine", gain: 0.15 }),
+      );
     },
   };
 })();
@@ -98,7 +117,16 @@ const SetAudio = (() => {
 document.addEventListener("DOMContentLoaded", () => {
   const btn = document.getElementById("mute-toggle");
   if (!btn) return;
-  const sync = () => btn.setAttribute("aria-pressed", SetAudio.isMuted() ? "true" : "false");
+  const label = document.getElementById("sound-label");
+  const sync = () => {
+    const muted = SetAudio.isMuted();
+    btn.setAttribute("aria-pressed", muted ? "true" : "false");
+    btn.setAttribute(
+      "aria-label",
+      muted ? "Turn sound on (M)" : "Turn sound off (M)",
+    );
+    if (label) label.textContent = muted ? "Sound off" : "Sound on";
+  };
   sync();
   btn.addEventListener("click", () => {
     SetAudio.setMuted(!SetAudio.isMuted());
@@ -109,7 +137,8 @@ document.addEventListener("DOMContentLoaded", () => {
   // through the same button so aria-pressed and the icon swap stay in
   // sync regardless of which path triggered it.
   document.addEventListener("keydown", (e) => {
-    if (e.key.toLowerCase() !== "m" || e.metaKey || e.ctrlKey || e.altKey) return;
+    if (e.key.toLowerCase() !== "m" || e.metaKey || e.ctrlKey || e.altKey)
+      return;
     const tag = (e.target.tagName || "").toLowerCase();
     if (tag === "input" || tag === "textarea") return;
     btn.click();

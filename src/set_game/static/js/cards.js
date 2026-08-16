@@ -10,7 +10,8 @@
 // overrides so reset always returns to the stylesheet's canonical colors.
 const DEFAULT_CARD_PALETTE = (() => {
   const root = getComputedStyle(document.documentElement);
-  const read = (name, fallback) => root.getPropertyValue(name).trim() || fallback;
+  const read = (name, fallback) =>
+    root.getPropertyValue(name).trim() || fallback;
   return Object.freeze({
     red: read("--card-red", "#c0392b"),
     green: read("--card-green", "#1e8449"),
@@ -25,7 +26,8 @@ function validCardPalette(value) {
   if (!value || typeof value !== "object") return null;
   const palette = {};
   for (const name of CARD_COLOR_NAMES) {
-    if (typeof value[name] !== "string" || !HEX_COLOR.test(value[name])) return null;
+    if (typeof value[name] !== "string" || !HEX_COLOR.test(value[name]))
+      return null;
     palette[name] = value[name].toLowerCase();
   }
   return palette;
@@ -44,7 +46,10 @@ let activeCardPalette = readSavedCardPalette() || { ...DEFAULT_CARD_PALETTE };
 function applyCardPalette(palette) {
   activeCardPalette = { ...palette };
   CARD_COLOR_NAMES.forEach((name) => {
-    document.documentElement.style.setProperty(`--card-${name}`, activeCardPalette[name]);
+    document.documentElement.style.setProperty(
+      `--card-${name}`,
+      activeCardPalette[name],
+    );
   });
 }
 
@@ -71,8 +76,10 @@ function symbolFillStroke(color, shading) {
   // CSS variable references stay live inside SVG attributes, so changing a
   // picker recolors cards already on screen without rebuilding their DOM.
   const cssColor = `var(--card-${color})`;
-  if (shading === "solid") return { fill: cssColor, stroke: cssColor, strokeWidth: 2 };
-  if (shading === "open") return { fill: "none", stroke: cssColor, strokeWidth: 3 };
+  if (shading === "solid")
+    return { fill: cssColor, stroke: cssColor, strokeWidth: 2 };
+  if (shading === "open")
+    return { fill: "none", stroke: cssColor, strokeWidth: 3 };
   // striped
   return { fill: `url(#stripes-${color})`, stroke: cssColor, strokeWidth: 2 };
 }
@@ -80,14 +87,17 @@ function symbolFillStroke(color, shading) {
 /** Returns an SVG markup string (viewBox 0 0 160 220) for the given card. */
 function cardSVGMarkup(card) {
   const ys = SYMBOL_Y_POSITIONS[card.number];
-  const { fill, stroke, strokeWidth } = symbolFillStroke(card.color, card.shading);
+  const { fill, stroke, strokeWidth } = symbolFillStroke(
+    card.color,
+    card.shading,
+  );
   const uses = ys
     .map(
       (y) =>
-        `<use href="#sym-${card.shape}" x="80" y="${y}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>`
+        `<use href="#sym-${card.shape}" x="80" y="${y}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>`,
     )
     .join("");
-  return `<svg viewBox="0 0 160 220" role="img" aria-label="${card.number} ${card.shading} ${card.color} ${card.shape}${card.number > 1 ? "s" : ""}">${uses}</svg>`;
+  return `<svg viewBox="0 0 160 220" aria-hidden="true" focusable="false">${uses}</svg>`;
 }
 
 /** Builds a full `.card` element (unattached) for the given card data.
@@ -99,6 +109,11 @@ function buildCardElement(card) {
   el.dataset.code = card.code;
   el.tabIndex = 0;
   el.setAttribute("role", "button");
+  el.setAttribute(
+    "aria-label",
+    `${card.number} ${card.shading} ${card.color} ${card.shape}${card.number > 1 ? "s" : ""}`,
+  );
+  el.setAttribute("aria-pressed", "false");
   el.innerHTML = cardSVGMarkup(card);
   return el;
 }
@@ -128,7 +143,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   inputs.forEach((input) => {
     input.addEventListener("input", () => {
-      saveCardPalette({ ...activeCardPalette, [input.dataset.cardColor]: input.value });
+      saveCardPalette({
+        ...activeCardPalette,
+        [input.dataset.cardColor]: input.value,
+      });
     });
   });
 
@@ -144,7 +162,8 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   document.addEventListener("pointerdown", (event) => {
-    if (!popover.hidden && !event.target.closest(".palette-control")) setOpen(false);
+    if (!popover.hidden && !event.target.closest(".palette-control"))
+      setOpen(false);
   });
 
   document.addEventListener("keydown", (event) => {
