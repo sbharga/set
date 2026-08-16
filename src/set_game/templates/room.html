@@ -1,5 +1,21 @@
 {% extends "base.html" %}
-{% block title %}SET — Game room{% endblock %}
+{% set seo_title = "Join a Private SET Game" %}
+{% set seo_description = "Join your friends in a private multiplayer game of SET." %}
+{% set seo_robots = "noindex, nofollow, noarchive" %}
+{% set seo_canonical = false %}
+{% block body_class %}room-page{% endblock %}
+
+{% block topbar_actions %}
+  <div
+    id="deck-status"
+    class="deck-status"
+    aria-label="Cards left in deck"
+    hidden
+  >
+    <span class="deck-icon" aria-hidden="true"></span>
+    <span><strong id="deck-count">0</strong> cards</span>
+  </div>
+{% endblock %}
 
 {% block content %}
   <div id="room-root" class="room" data-room-code="{{ room_code }}">
@@ -72,13 +88,6 @@
     </section>
 
     <section id="game-view" class="game-view view" hidden>
-      <div class="match-header">
-        <h1 id="match-title" class="match-title">SET</h1>
-        <p id="game-status" class="game-status" aria-live="polite">
-          Look closely. Be the first to spot a set!
-        </p>
-      </div>
-
       <div class="stage">
         <div
           id="board"
@@ -87,8 +96,8 @@
           aria-live="polite"
         ></div>
 
-        <aside class="rail" aria-label="Match status">
-          <div id="rail-timer" class="rail-timer" hidden>
+        <aside id="status-rail" class="rail" aria-label="Match timer" hidden>
+          <div id="rail-timer" class="rail-timer">
             <div class="rail-ring-wrap">
               <svg class="buzz-ring" viewBox="0 0 100 100" aria-hidden="true">
                 <circle class="buzz-ring-track" cx="50" cy="50" r="45"></circle>
@@ -108,11 +117,6 @@
               <strong id="rail-timer-name"></strong>
               <span>is choosing cards</span>
             </div>
-          </div>
-
-          <div class="rail-deck" aria-label="Cards left in deck">
-            <span class="deck-icon" aria-hidden="true"></span>
-            <span><strong id="deck-count">0</strong> cards left</span>
           </div>
         </aside>
 
@@ -136,16 +140,23 @@
         </section>
         <div class="actions" aria-label="Game actions">
           <button id="buzz-btn" class="btn btn-buzz" type="button">
-            <span class="btn-label">I found a SET!</span><kbd>space</kbd>
+            <span class="btn-label">I found a SET!</span>
           </button>
-          <button
-            id="no-set-btn"
-            class="btn btn-secondary"
-            type="button"
-            title="Vote that there are no sets among the cards"
-          >
-            <span class="btn-label">No SET here</span><kbd>N</kbd>
-          </button>
+          <div class="no-set-control">
+            <button
+              id="no-set-btn"
+              class="btn btn-secondary"
+              type="button"
+              title="Vote that there are no sets among the cards"
+            >
+              <span class="btn-label">No SET here</span>
+            </button>
+            <span
+              id="no-set-vote-status"
+              class="vote-status"
+              aria-live="polite"
+            ></span>
+          </div>
         </div>
       </div>
     </section>
