@@ -63,8 +63,5 @@ def choose_action(
     if rng.random() <= PROFILES[difficulty].accuracy:
         return BotDecision(valid)
 
-    invalid = next(
-        (triple for triple in combinations(cards, 3) if not deck.is_set(*triple)),
-        None,
-    )
-    return BotDecision(invalid or valid)
+    invalid = [triple for triple in combinations(cards, 3) if not deck.is_set(*triple)]
+    return BotDecision(rng.choice(invalid) if invalid else valid)

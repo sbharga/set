@@ -153,8 +153,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const buzzCaptionEl = document.getElementById("buzz-caption");
   const buzzCaptionNameEl = document.getElementById("buzz-caption-name");
   const buzzCaptionSecondsEl = document.getElementById("buzz-caption-seconds");
-  const buzzFrameEl = document.getElementById("buzz-frame");
-  const buzzFrameProgressEl = document.getElementById("buzz-frame-progress");
+  const buzzBarFillEl = document.getElementById("buzz-bar-fill");
   const revealCaptionEl = document.getElementById("reveal-caption");
   const revealCreditEl = document.getElementById("reveal-credit");
   const revealFeaturesEl = document.getElementById("reveal-features");
@@ -1009,15 +1008,12 @@ document.addEventListener("DOMContentLoaded", () => {
       });
   }
 
-  function updateBuzzRing(now) {
+  function updateBuzzTimer(now) {
     const left = Math.max(0, buzzDeadline - now);
     const fraction = buzzDurationMs ? Math.min(1, left / buzzDurationMs) : 0;
-    // pathLength="1" on the <rect>s in room.html normalizes the perimeter
-    // to 1 regardless of the board's actual (JS-sized) box, so the drain
-    // fraction maps straight to stroke-dashoffset -- no perimeter math.
-    buzzFrameProgressEl.style.strokeDashoffset = String(1 - fraction);
+    buzzBarFillEl.style.width = `${fraction * 100}%`;
     const urgent = left <= 3000;
-    buzzFrameProgressEl.classList.toggle("urgent", urgent);
+    buzzBarFillEl.classList.toggle("urgent", urgent);
     const wholeSecond = Math.ceil(left / 1000);
     buzzCaptionSecondsEl.textContent = wholeSecond;
     if (
@@ -1046,11 +1042,11 @@ document.addEventListener("DOMContentLoaded", () => {
     return Object.values(lockoutEndsAtByPlayer).some((t) => t > now);
   }
 
-  // A single ticking loop drives every countdown display (the ring, the
-  // button labels, each tile's cooldown text, the reveal countdown) so
+  // A single ticking loop drives every countdown display (the buzz bar,
+  // the button labels, each tile's cooldown text, the reveal countdown) so
   // there's one clock instead of several timers racing to write the same
   // elements. Under reduced motion the numeric countdowns still need to
-  // update -- just coarsely (250ms), since there's no ring sweep to
+  // update -- just coarsely (250ms), since there's no bar sweep to
   // justify a 60fps loop.
   let tickHandle = null;
   function ensureTicking() {
@@ -1063,7 +1059,7 @@ document.addEventListener("DOMContentLoaded", () => {
       // guarantees the found cards don't stay lit and the board doesn't
       // stay frozen forever.
       if (revealEndsAt && now >= revealEndsAt) flushPendingClaim();
-      if (latestSnapshot && latestSnapshot.buzz) updateBuzzRing(now);
+      if (latestSnapshot && latestSnapshot.buzz) updateBuzzTimer(now);
       updateControlsEnabled(now);
       updateLockoutTiles(now);
       updateRevealCountdownText(now);
@@ -1514,8 +1510,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function startBuzzUI(data) {
     const amBuzzer = data.player_id === myPlayerId;
     boardEl.classList.toggle("dimmed", !amBuzzer);
-    buzzFrameEl.hidden = false;
     buzzCaptionNameEl.textContent = amBuzzer ? "You" : data.name;
+    buzzBarFillEl.style.width = "100%";
+    buzzBarFillEl.classList.remove("urgent");
     revealCaptionEl.hidden = true;
     buzzCaptionEl.hidden = false;
     stageCaptionEl.classList.add("is-active");
@@ -1528,7 +1525,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function stopBuzzUI() {
     boardEl.classList.remove("dimmed");
-    buzzFrameEl.hidden = true;
     buzzCaptionEl.hidden = true;
     if (revealCaptionEl.hidden) stageCaptionEl.classList.remove("is-active");
     buzzDeadline = 0;

@@ -861,19 +861,16 @@ kbd {
   gap: var(--space-2);
 }
 /* Fixed-height reservation so the board's available space never changes
-   when a buzz starts/ends or a reveal begins -- only the text inside this
-   bar changes, the bar itself is always present. See .card-found and
-   .buzz-frame below for how the timer and reveal now live on the board
-   itself instead of in a floating pill. */
+   when a buzz starts/ends or a reveal begins -- only the content inside
+   this bar changes, the bar itself is always present. See .card-found
+   below and .buzz-bar further down for how the countdown and reveal now
+   live right above the board instead of in a floating pill. */
 .stage-caption {
-  min-height: 40px;
+  min-height: 48px;
   padding: 2px var(--space-3);
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-wrap: wrap;
-  row-gap: 2px;
-  gap: var(--space-3);
   color: var(--ink-soft);
   font-size: var(--text-sm);
   text-align: center;
@@ -887,6 +884,41 @@ kbd {
   color: var(--ink);
   font-weight: 650;
 }
+.buzz-caption {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.reveal-caption {
+  flex-wrap: wrap;
+  row-gap: 2px;
+  gap: var(--space-3);
+}
+/* A bold, unmistakable drain -- easier to read at a glance than a thin
+   trace around the board's edge. Width updates on the same rAF loop as
+   everything else (ensureTicking / updateBuzzTimer in game.js). */
+.buzz-bar {
+  width: min(360px, 80%);
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--border);
+  overflow: hidden;
+}
+.buzz-bar-fill {
+  display: block;
+  height: 100%;
+  width: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+  transition:
+    width 0.1s linear,
+    background var(--dur-med) ease;
+}
+.buzz-bar-fill.urgent {
+  background: #d97706;
+}
 /* Pure measurement box: always fills the remaining stage space regardless
    of the board's own (JS-computed) size, so game.js can read its rect to
    size cards without a feedback loop. */
@@ -899,12 +931,6 @@ kbd {
   display: flex;
   align-items: center;
   justify-content: center;
-}
-/* Shrink-wraps tightly to the rendered board so the buzz-frame overlay
-   lines up with the actual card grid, not the wider measurement box. */
-.board-frame {
-  position: relative;
-  display: inline-block;
 }
 .board {
   --board-gap: clamp(8px, 1.3vw, 16px);
@@ -1147,38 +1173,6 @@ kbd {
   }
 }
 
-/* The buzz countdown drains around the board's own perimeter instead of a
-   floating pill, so it's visible in peripheral vision while you scan
-   cards. Normalized via pathLength="1" on the <rect>s in room.html, so the
-   drain fraction maps straight to stroke-dashoffset at any board size --
-   no perimeter math needed here. */
-.buzz-frame {
-  position: absolute;
-  inset: -9px;
-  z-index: 1;
-  pointer-events: none;
-}
-.buzz-frame-track {
-  fill: none;
-  stroke: var(--border);
-  stroke-width: 2.5;
-  vector-effect: non-scaling-stroke;
-}
-.buzz-frame-progress {
-  fill: none;
-  stroke: var(--accent);
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  stroke-dasharray: 1;
-  stroke-dashoffset: 0;
-  vector-effect: non-scaling-stroke;
-  transition:
-    stroke-dashoffset 0.1s linear,
-    stroke var(--dur-med) ease;
-}
-.buzz-frame-progress.urgent {
-  stroke: #d97706;
-}
 .deck-icon {
   width: 24px;
   height: 32px;
@@ -2078,8 +2072,11 @@ kbd {
     outline: 4px solid Highlight;
     outline-offset: 2px;
   }
-  .buzz-frame-progress {
-    stroke: Highlight;
+  .buzz-bar {
+    border: 1px solid CanvasText;
+  }
+  .buzz-bar-fill {
+    background: Highlight;
   }
   .player-tile.active-buzzer {
     outline: 3px solid Highlight;
