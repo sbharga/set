@@ -15,7 +15,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const createRoomBtn = document.getElementById("create-room-btn");
   const codeInput = document.getElementById("room-code-input");
   const joinRoomBtn = document.getElementById("join-room-btn");
-  const connectionEl = document.getElementById("home-connection");
   const requestedRoom = new URLSearchParams(window.location.search)
     .get("room")
     ?.toUpperCase();
@@ -104,9 +103,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const socket = io();
   let createTimeout = null;
   function setConnection(connected) {
-    connectionEl.textContent = connected ? "Ready" : "Reconnecting";
-    connectionEl.classList.toggle("is-live", connected);
-    connectionEl.classList.toggle("is-offline", !connected);
     createRoomBtn.disabled = !connected;
     if (!connected) clearTimeout(createTimeout);
     if (connected) lobbyError.hidden = true;

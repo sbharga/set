@@ -157,7 +157,6 @@ document.addEventListener("DOMContentLoaded", () => {
   if (!toggle || !popover || !reset) return;
 
   const inputs = [...popover.querySelectorAll("input[data-card-color]")];
-  const paletteControl = toggle.closest(".palette-control");
 
   function syncInputs() {
     inputs.forEach((input) => {
@@ -211,13 +210,6 @@ document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("pointerdown", (event) => {
     if (!popover.hidden && !event.target.closest(".palette-control"))
       setOpen(false);
-  });
-
-  paletteControl.addEventListener("focusout", () => {
-    queueMicrotask(() => {
-      if (!popover.hidden && !paletteControl.contains(document.activeElement))
-        setOpen(false);
-    });
   });
 
   document.addEventListener("set:close-card-palette", () => setOpen(false));

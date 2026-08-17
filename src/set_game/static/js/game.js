@@ -148,7 +148,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const revealCountdownEl = document.getElementById("reveal-countdown");
   const toastEl = document.getElementById("toast");
   const gameStatusEl = document.getElementById("game-status");
-  const connectionEl = document.getElementById("room-connection");
 
   const RING_CIRCUMFERENCE = 283; // 2 * pi * r45, matches the SVG circle
   const REDUCED_MOTION = window.matchMedia(
@@ -233,13 +232,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   const socket = io();
 
-  function showConnection(label, state) {
-    if (!connectionEl) return;
-    connectionEl.textContent = label;
-    connectionEl.classList.toggle("is-live", state === "live");
-    connectionEl.classList.toggle("is-offline", state === "offline");
-  }
-
   function showTerminalConnection(message) {
     connectionReady = false;
     views.connecting.replaceChildren();
@@ -273,7 +265,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   socket.on("connect", () => {
     if (removedFromRoom) return;
-    showConnection("Syncing", "");
     // Stay read-only until the server answers with a fresh room snapshot.
     // Socket.IO may have reconnected after the board changed while this
     // tab was offline.
@@ -296,7 +287,6 @@ document.addEventListener("DOMContentLoaded", () => {
       );
       return;
     }
-    showConnection("Reconnecting", "offline");
     updateControlsEnabled();
     updateConnectionControls();
     if (hasJoined)
@@ -515,7 +505,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (document.visibilityState === "visible" && hasJoined) {
       joinPending = true;
       connectionReady = false;
-      showConnection("Syncing", "");
       updateControlsEnabled();
       updateConnectionControls();
       socket.emit("join_room", {
@@ -544,7 +533,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const previousPhase = latestSnapshot?.phase;
     joinPending = false;
     connectionReady = true;
-    showConnection("Connected", "live");
     latestSnapshot = snapshot;
     document.getElementById("game-title").textContent = snapshot.title;
     if (previousPhase && previousPhase !== snapshot.phase) lastScores = {};

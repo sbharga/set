@@ -398,27 +398,6 @@ button {
 .section-heading-row .section-label {
   margin: 0;
 }
-.connection-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  color: var(--ink-faint);
-  font-size: var(--text-xs);
-  white-space: nowrap;
-}
-.connection-status::before {
-  content: "";
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-}
-.connection-status.is-live {
-  color: var(--success);
-}
-.connection-status.is-offline {
-  color: var(--danger);
-}
 .count-pill {
   padding: 0;
   color: var(--ink-soft);
