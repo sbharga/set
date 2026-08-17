@@ -71,6 +71,10 @@ def test_room_exposes_concise_accessible_game_status(app):
     assert 'aria-label="Cards in play"' in html
     assert 'aria-keyshortcuts="Space"' in html
     assert 'aria-keyshortcuts="N"' in html
+    assert 'id="bot-difficulty-select"' in html
+    assert 'aria-describedby="bot-setting-status"' in html
+    assert 'id="bot-setting-status"' in html
+    assert 'aria-live="polite"' in html
 
 
 def test_production_https_uses_transport_security_headers(monkeypatch):
@@ -83,6 +87,4 @@ def test_production_https_uses_transport_security_headers(monkeypatch):
         response = client.get("/", base_url="https://example.test")
 
     assert response.status_code == 200
-    assert response.headers["Strict-Transport-Security"].startswith(
-        "max-age=31536000"
-    )
+    assert response.headers["Strict-Transport-Security"].startswith("max-age=31536000")

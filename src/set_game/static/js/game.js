@@ -148,6 +148,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const revealCountdownEl = document.getElementById("reveal-countdown");
   const toastEl = document.getElementById("toast");
   const gameStatusEl = document.getElementById("game-status");
+  const botDifficultySelect = document.getElementById("bot-difficulty-select");
+  const botSettingStatusEl = document.getElementById("bot-setting-status");
 
   const RING_CIRCUMFERENCE = 283; // 2 * pi * r45, matches the SVG circle
   const REDUCED_MOTION = window.matchMedia(
@@ -305,6 +307,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     toast(data.message, "error");
     announce(data.message);
+    if (latestSnapshot?.phase === "lobby") updateBotControl(latestSnapshot);
   });
 
   socket.on("room_state", (snapshot) => renderSnapshot(snapshot));
@@ -315,6 +318,8 @@ document.addEventListener("DOMContentLoaded", () => {
     );
     if (data.title) latestSnapshot.title = data.title;
     latestSnapshot.players = data.players || latestSnapshot.players;
+    if (Object.prototype.hasOwnProperty.call(data, "bot_difficulty"))
+      latestSnapshot.bot_difficulty = data.bot_difficulty;
     if (data.winner_ids) latestSnapshot.winner_ids = data.winner_ids;
     if (data.no_set_vote) {
       noSetVoters = new Set(data.no_set_vote.voters);
@@ -529,6 +534,38 @@ document.addEventListener("DOMContentLoaded", () => {
     return !!(me && me.spectator);
   }
 
+  function botDifficultyLabel(difficulty) {
+    return difficulty
+      ? difficulty.charAt(0).toUpperCase() + difficulty.slice(1)
+      : "";
+  }
+
+  function appendBotTags(container, player) {
+    if (!player.is_bot) return;
+    container.appendChild(buildTag("BOT", "tag-bot"));
+    const difficulty = botDifficultyLabel(player.bot_difficulty);
+    if (difficulty)
+      container.appendChild(buildTag(difficulty.toUpperCase(), "tag-bot-level"));
+  }
+
+  function updateBotControl(snapshot) {
+    const difficulty = snapshot.bot_difficulty || "none";
+    botDifficultySelect.value = difficulty;
+    const me = snapshot.players.find((p) => p.player_id === myPlayerId);
+    botDifficultySelect.disabled = !(
+      snapshot.phase === "lobby" &&
+      connectionReady &&
+      me?.is_host &&
+      me.connected
+    );
+    const status =
+      difficulty === "none"
+        ? "No bot is playing."
+        : `Bot difficulty: ${botDifficultyLabel(difficulty)}.`;
+    if (botSettingStatusEl.textContent !== status)
+      botSettingStatusEl.textContent = status;
+  }
+
   function renderSnapshot(snapshot) {
     const previousPhase = latestSnapshot?.phase;
     joinPending = false;
@@ -596,6 +633,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function renderWaitingView(snapshot) {
     document.getElementById("waiting-title").textContent = snapshot.title;
+    updateBotControl(snapshot);
     const list = document.getElementById("waiting-player-list");
     const focusedPlayerId = document.activeElement?.classList?.contains("kick-player")
       ? document.activeElement.dataset.playerId
@@ -609,6 +647,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const actions = document.createElement("span");
       if (p.is_host) actions.appendChild(buildTag("HOST"));
       if (p.player_id === myPlayerId) actions.appendChild(buildTag("YOU"));
+      appendBotTags(actions, p);
       if (!p.connected) actions.appendChild(buildTag("OFFLINE", "tag-offline"));
       const remove = buildRemoveButton(p, "link-btn");
       if (remove) actions.appendChild(remove);
@@ -659,6 +698,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const name = document.createElement("span");
       name.className = "name";
       name.textContent = `${p.name}${p.player_id === myPlayerId ? " (you)" : ""}${p.spectator ? " · watching" : ""}`;
+      appendBotTags(name, p);
       if (noSetVoters.has(p.player_id))
         name.appendChild(buildTag("NO SET", "tag-vote"));
       const score = document.createElement("span");
@@ -684,6 +724,8 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       lastScores[p.player_id] = p.score;
       const states = [];
+      if (p.is_bot)
+        states.push(`${botDifficultyLabel(p.bot_difficulty) || "computer"} bot`);
       if (p.spectator) states.push("watching");
       if (buzz?.player_id === p.player_id) states.push("choosing cards");
       if (noSetVoters.has(p.player_id)) states.push("voted no set");
@@ -733,6 +775,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const title = document.createElement("span");
       title.className = "row-title";
       title.textContent = p.name;
+      appendBotTags(title, p);
       const meta = document.createElement("span");
       meta.className = "row-meta";
       meta.textContent = `${p.score} ${snapshot.winner_ids.includes(p.player_id) ? "· WINNER" : ""}`;
@@ -760,7 +803,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function buildRemoveButton(player, extraClass) {
-    if (!isHost() || player.player_id === myPlayerId) return null;
+    if (!isHost() || player.is_bot || player.player_id === myPlayerId) return null;
     const button = document.createElement("button");
     button.className = `kick-player ${extraClass}`;
     button.type = "button";
@@ -853,7 +896,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateConnectionControls() {
     root
-      .querySelectorAll("#start-game-btn, #play-again-btn, .kick-player")
+      .querySelectorAll(
+        "#start-game-btn, #play-again-btn, #bot-difficulty-select, .kick-player",
+      )
       .forEach((button) => {
         if (!connectionReady) button.disabled = true;
       });
@@ -1343,6 +1388,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
   buzzBtn.addEventListener("click", () => socket.emit("buzz"));
   noSetBtn.addEventListener("click", () => socket.emit("vote_no_set"));
+  botDifficultySelect.addEventListener("change", () => {
+    const difficulty = botDifficultySelect.value;
+    if (
+      !["none", "easy", "medium", "hard"].includes(difficulty) ||
+      !isHost() ||
+      !connectionReady ||
+      latestSnapshot?.phase !== "lobby"
+    )
+      return;
+    socket.emit("configure_bot", { difficulty });
+  });
   document
     .getElementById("start-game-btn")
     .addEventListener("click", () => socket.emit("start_game"));

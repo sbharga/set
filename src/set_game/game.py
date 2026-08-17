@@ -33,6 +33,7 @@ from enum import Enum
 from random import Random
 
 from . import deck
+from .bot import BOT_NAME, BOT_PLAYER_ID, BotDifficulty
 
 BOARD_MIN = 12
 BUZZ_SECONDS = 10.0
@@ -64,6 +65,8 @@ class Player:
     spectator: bool = False
     lockout_until: float = 0.0
     disconnected_at: float | None = None
+    is_bot: bool = False
+    bot_difficulty: BotDifficulty | None = None
 
     def to_dict(self, now: float) -> dict:
         return {
@@ -73,6 +76,10 @@ class Player:
             "connected": self.connected,
             "is_host": self.is_host,
             "spectator": self.spectator,
+            "is_bot": self.is_bot,
+            "bot_difficulty": (
+                self.bot_difficulty.value if self.bot_difficulty else None
+            ),
             "locked_out": self.lockout_until > now,
             "lockout_remaining_ms": max(0, int((self.lockout_until - now) * 1000)),
         }
@@ -89,6 +96,8 @@ class Buzz:
 class Game:
     room_code: str
     rng: Random = field(default_factory=Random)
+    # Bot choices must not consume the deck RNG and alter future shuffles.
+    bot_rng: Random = field(default_factory=Random, compare=False, repr=False)
     created_at: float = field(default_factory=time.monotonic)
 
     phase: Phase = Phase.LOBBY
@@ -110,6 +119,10 @@ class Game:
     # room-lifetime-only: anonymous users can otherwise create a fresh
     # identity, but a kicked tab cannot immediately reclaim its old seat.
     blocked_auth_digests: set[str] = field(default_factory=set, repr=False)
+    # Every scheduled bot thought captures this value. Incrementing it makes
+    # older sleepers harmless after a human action or configuration change.
+    bot_action_generation: int = 0
+    bot_action_pending: bool = False
 
     # RLock (not Lock) so a helper that re-enters the lock from within an
     # already-locked call path -- e.g. a broadcast helper called while a
@@ -128,6 +141,8 @@ class Game:
     def add_player(
         self, player_id: str, sid: str, name: str, auth_digest: str = ""
     ) -> Player:
+        if player_id == BOT_PLAYER_ID:
+            raise ValueError("reserved player id")
         if player_id in self.players:
             p = self.players[player_id]
             p.name = name
@@ -141,7 +156,7 @@ class Game:
         # period, so a room can never exceed its advertised eight players.
         if len(self.players) >= MAX_PLAYERS:
             raise ValueError("room full")
-        is_host = len(self.players) == 0
+        is_host = not any(not player.is_bot for player in self.players.values())
         # Games already in progress seat new joiners as spectators until
         # the next round; the lobby seats everyone as active players.
         spectator = self.phase != Phase.LOBBY
@@ -156,6 +171,49 @@ class Game:
         self.players[player_id] = p
         self.order.append(player_id)
         return p
+
+    @property
+    def bot_player(self) -> Player | None:
+        player = self.players.get(BOT_PLAYER_ID)
+        return player if player and player.is_bot else None
+
+    @property
+    def bot_difficulty(self) -> BotDifficulty | None:
+        bot_player = self.bot_player
+        return bot_player.bot_difficulty if bot_player else None
+
+    def configure_bot(self, difficulty: BotDifficulty | None) -> Player | None:
+        if self.phase != Phase.LOBBY:
+            raise ValueError("bot can only be changed in the lobby")
+        self.invalidate_bot_action()
+        bot_player = self.bot_player
+        if difficulty is None:
+            if bot_player:
+                self.remove_player(BOT_PLAYER_ID)
+            return None
+        if bot_player:
+            bot_player.bot_difficulty = difficulty
+            return bot_player
+        if len(self.players) >= MAX_PLAYERS:
+            raise ValueError("room full")
+        bot_player = Player(
+            player_id=BOT_PLAYER_ID,
+            name=BOT_NAME,
+            connected=True,
+            is_bot=True,
+            bot_difficulty=difficulty,
+        )
+        self.players[BOT_PLAYER_ID] = bot_player
+        self.order.append(BOT_PLAYER_ID)
+        return bot_player
+
+    def invalidate_bot_action(self) -> int:
+        self.bot_action_generation += 1
+        self.bot_action_pending = False
+        return self.bot_action_generation
+
+    def human_players(self) -> list[Player]:
+        return [p for p in self.players.values() if not p.is_bot]
 
     def is_blocked(self, auth_digest: str) -> bool:
         return auth_digest in self.blocked_auth_digests
@@ -210,7 +268,7 @@ class Game:
         # still present to view them. Once everybody disconnects, normal
         # removal resumes so the room can be collected.
         preserve_standings = self.phase == Phase.FINISHED and any(
-            p.connected for p in self.players.values()
+            p.connected and not p.is_bot for p in self.players.values()
         )
         for pid, p in list(self.players.items()):
             if (
@@ -231,7 +289,7 @@ class Game:
     def _reassign_host(self) -> None:
         for pid in self.order:
             p = self.players.get(pid)
-            if p and p.connected:
+            if p and p.connected and not p.is_bot:
                 p.is_host = True
                 return
 
@@ -247,6 +305,7 @@ class Game:
     # --- lifecycle ----------------------------------------------------
 
     def start(self) -> None:
+        self.invalidate_bot_action()
         self.deck_remaining = deck.shuffled_deck(self.rng)
         self.board = []
         self._deal(BOARD_MIN)
@@ -263,6 +322,7 @@ class Game:
             p.spectator = not p.connected
 
     def reset_to_lobby(self) -> None:
+        self.invalidate_bot_action()
         self.phase = Phase.LOBBY
         self.deck_remaining = []
         self.board = []
@@ -540,6 +600,9 @@ class Game:
             "room_code": self.room_code,
             "title": self.title,
             "phase": self.phase.value,
+            "bot_difficulty": (
+                self.bot_difficulty.value if self.bot_difficulty else None
+            ),
             "players": [
                 self.players[pid].to_dict(now)
                 for pid in self.order

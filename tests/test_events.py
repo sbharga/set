@@ -1,6 +1,10 @@
+from random import Random
+
 import pytest
 
 from set_game.app import create_app, socketio
+from set_game.bot import BOT_PLAYER_ID
+from set_game.game import Phase
 from set_game.rooms import registry
 
 PLAYER_ID = "player-identifier-01"
@@ -200,3 +204,132 @@ def test_one_socket_cannot_occupy_multiple_player_seats(app):
             client.disconnect()
         registry.remove(first_game.room_code)
         registry.remove(second_game.room_code)
+
+
+def test_host_can_configure_bot_but_guest_cannot(app):
+    game = registry.create_room()
+    host = socketio.test_client(app)
+    guest = socketio.test_client(app)
+    try:
+        join(host, game.room_code, player_id="host-bot-config-01")
+        join(
+            guest,
+            game.room_code,
+            player_id="guest-bot-config1",
+            player_token="b" * 64,
+        )
+        host.get_received()
+        guest.get_received()
+
+        guest.emit("configure_bot", {"difficulty": "hard"})
+        assert game.bot_player is None
+        errors = [e for e in guest.get_received() if e["name"] == "action_error"]
+        assert errors[0]["args"][0]["message"] == "Only the host can change the bot."
+
+        host.emit("configure_bot", {"difficulty": "medium"})
+        assert game.bot_difficulty is not None
+        assert game.bot_difficulty.value == "medium"
+        assert BOT_PLAYER_ID in game.players
+        updates = [e for e in host.get_received() if e["name"] == "players_updated"]
+        assert updates[-1]["args"][0]["bot_difficulty"] == "medium"
+
+        host.emit("configure_bot", {"difficulty": "none"})
+        assert game.bot_player is None
+    finally:
+        if host.is_connected():
+            host.disconnect()
+        if guest.is_connected():
+            guest.disconnect()
+        registry.remove(game.room_code)
+
+
+def test_one_human_and_hard_bot_play_through_normal_events(app, monkeypatch):
+    from set_game import events
+
+    game = registry.create_room()
+    game.rng = Random(2)
+    host = socketio.test_client(app)
+
+    def run_immediately(target, *args, **kwargs):
+        target(*args, **kwargs)
+
+    monkeypatch.setattr(events, "reaction_delay", lambda _difficulty, _rng: 0.0)
+    monkeypatch.setattr(events, "_socketio_sleep", lambda _seconds: None)
+    monkeypatch.setattr(socketio, "start_background_task", run_immediately)
+    try:
+        join(host, game.room_code, player_id="solo-bot-host-001")
+        host.get_received()
+        host.emit("configure_bot", {"difficulty": "hard"})
+        host.get_received()
+
+        host.emit("start_game")
+
+        assert game.phase == Phase.PLAYING
+        assert game.players[BOT_PLAYER_ID].score == 1
+        event_names = [event["name"] for event in host.get_received()]
+        assert "game_started" in event_names
+        assert "buzz_started" in event_names
+        assert event_names.count("card_selected") == 3
+        assert "set_claimed" in event_names
+        assert "buzz_ended" in event_names
+    finally:
+        if host.is_connected():
+            host.disconnect()
+        registry.remove(game.room_code)
+
+
+def test_bot_votes_when_the_board_has_no_set(monkeypatch):
+    from set_game import events
+    from set_game.bot import BotDifficulty
+
+    game = registry.create_room()
+    game.add_player("human-player-0001", "sid", "Human")
+    game.configure_bot(BotDifficulty.EASY)
+    game.start()
+    game.board = [0, 1]
+    game.deck_remaining = [2, 3, 4]
+
+    monkeypatch.setattr(events, "_socketio_sleep", lambda _seconds: None)
+    monkeypatch.setattr(
+        socketio,
+        "start_background_task",
+        lambda target, *args, **kwargs: target(*args, **kwargs),
+    )
+    try:
+        events._schedule_bot_action(game)
+
+        assert game.no_set_votes == {BOT_PLAYER_ID}
+    finally:
+        registry.remove(game.room_code)
+
+
+def test_stale_bot_thought_cannot_steal_a_human_buzz(monkeypatch):
+    from set_game import events
+    from set_game.bot import BotDifficulty
+
+    game = registry.create_room()
+    human_id = "human-player-0001"
+    game.add_player(human_id, "sid", "Human")
+    game.configure_bot(BotDifficulty.HARD)
+    game.start()
+    scheduled = []
+
+    monkeypatch.setattr(
+        socketio,
+        "start_background_task",
+        lambda target, *args, **kwargs: scheduled.append((target, args, kwargs)),
+    )
+    monkeypatch.setattr(events, "_socketio_sleep", lambda _seconds: None)
+    try:
+        events._schedule_bot_action(game)
+        target, args, kwargs = scheduled.pop()
+        game.invalidate_bot_action()
+        human_buzz = game.start_buzz(human_id, events._now())
+
+        target(*args, **kwargs)
+
+        assert game.buzz is human_buzz
+        assert game.buzz is not None
+        assert game.buzz.player_id == human_id
+    finally:
+        registry.remove(game.room_code)

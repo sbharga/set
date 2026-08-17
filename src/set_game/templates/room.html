@@ -59,6 +59,30 @@
         </div>
       </div>
 
+      <div class="bot-config">
+        <label class="bot-config-label" for="bot-difficulty-select">
+          Computer player
+        </label>
+        <select
+          id="bot-difficulty-select"
+          class="bot-difficulty-select"
+          aria-describedby="bot-setting-status"
+          disabled
+        >
+          <option value="none">No bot</option>
+          <option value="easy">Easy</option>
+          <option value="medium">Medium</option>
+          <option value="hard">Hard</option>
+        </select>
+        <span
+          id="bot-setting-status"
+          class="bot-setting-status"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >No bot is playing.</span>
+      </div>
+
       <div class="section-heading-row">
         <h2 class="section-label">Who’s playing</h2>
         <span id="player-count" class="count-pill">0 of 8</span>
