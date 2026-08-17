@@ -996,25 +996,6 @@ kbd {
 .card[data-color-category="purple"]::after {
   content: "III";
 }
-/* Keyboard grid hint: only rendered while it's your buzz (.keys-armed,
-   toggled alongside every other interactivity flag in
-   updateBoardInteractivity) and only on cards that got a key assigned. */
-.card::before {
-  content: attr(data-key);
-  position: absolute;
-  bottom: 5px;
-  left: 7px;
-  color: var(--ink-faint);
-  font-size: 9px;
-  font-weight: 750;
-  line-height: 1;
-  text-transform: uppercase;
-  opacity: 0;
-  transition: opacity var(--dur-fast) ease;
-}
-.board.keys-armed .card[data-key]::before {
-  opacity: 0.72;
-}
 .board .card {
   width: 100%;
 }

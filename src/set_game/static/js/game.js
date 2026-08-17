@@ -167,7 +167,6 @@ document.addEventListener("DOMContentLoaded", () => {
     "(prefers-reduced-motion: reduce)",
   ).matches;
   const MOBILE_QUERY = window.matchMedia("(max-width: 640px)");
-  const ROW_KEYS = ["1234567", "QWERTYU", "ASDFGHJ"];
 
   let hasJoined = false;
   let connectionReady = false;
@@ -969,7 +968,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateBoardInteractivity() {
     const canSelect = canSelectCard();
-    boardEl.classList.toggle("keys-armed", canSelect);
     const cards = [...boardEl.querySelectorAll(".card")];
     if (
       canSelect &&
@@ -1076,7 +1074,7 @@ document.addEventListener("DOMContentLoaded", () => {
       : requestAnimationFrame(run);
   }
 
-  // --- board sizing + keyboard grid --------------------------------------
+  // --- board sizing --------------------------------------------------------
 
   /** Measures .board-stage (a flex box that always fills the remaining
    * stage space regardless of the board's own size -- no feedback loop)
@@ -1121,44 +1119,8 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!mobile) boardEl.style.setProperty("--board-rows", String(rows));
   }
 
-  /** Maps each card to a key by its *measured* grid position (row-grouped
-   * by rect.top, then column-ordered by rect.left) rather than DOM order,
-   * so it's correct in both the desktop column-flow and phone row-flow
-   * layouts. Only cards within the first three rows get a key -- that
-   * covers any real board (7 columns is above the widest layout ever
-   * reaches). Hints only render while `.keys-armed` is set (see
-   * updateBoardInteractivity), i.e. only during your own buzz window. */
-  function assignBoardKeys() {
-    const cards = [...boardEl.querySelectorAll(".card:not(.card-vanish)")];
-    const withRects = cards.map((el) => ({ el, rect: el.getBoundingClientRect() }));
-    withRects.sort((a, b) => a.rect.top - b.rect.top);
-    const rowGroups = [];
-    withRects.forEach((item) => {
-      const group = rowGroups.find(
-        (g) => Math.abs(g.top - item.rect.top) < item.rect.height * 0.4,
-      );
-      if (group) group.items.push(item);
-      else rowGroups.push({ top: item.rect.top, items: [item] });
-    });
-    rowGroups.forEach((group, rowIndex) => {
-      group.items.sort((a, b) => a.rect.left - b.rect.left);
-      const keys = ROW_KEYS[rowIndex] || "";
-      group.items.forEach((item, colIndex) => {
-        const key = keys[colIndex];
-        if (key) {
-          item.el.dataset.key = key;
-          item.el.setAttribute("aria-keyshortcuts", key);
-        } else {
-          delete item.el.dataset.key;
-          item.el.removeAttribute("aria-keyshortcuts");
-        }
-      });
-    });
-  }
-
   function onBoardContainerResize() {
     sizeBoard();
-    assignBoardKeys();
   }
   if (typeof ResizeObserver !== "undefined") {
     new ResizeObserver(onBoardContainerResize).observe(boardStageEl);
@@ -1223,16 +1185,6 @@ document.addEventListener("DOMContentLoaded", () => {
       else boardEl.prepend(el);
       cursor = el;
     });
-
-    // Read positions here, before the FLIP block below applies any
-    // transform: getBoundingClientRect() reports the *visual* (transformed)
-    // position, and a card mid-glide would still visually be at its old
-    // spot for the next ~400ms -- reassigning keys after that point would
-    // key off stale positions. Right here the grid has already reflowed to
-    // its final layout (sizeBoard ran at the top of this function) but no
-    // FLIP transform has been applied yet, so this is the one moment that's
-    // both final and untransformed.
-    assignBoardKeys();
 
     if (!REDUCED_MOTION) {
       // Deal-in cards animate from the deck count in the header.
@@ -1554,13 +1506,6 @@ document.addEventListener("DOMContentLoaded", () => {
         socket.emit("vote_no_set");
       return;
     }
-    // Keyboard grid: each card in the board is mapped to a key by its
-    // measured row/column position (assignBoardKeys), rendered as a hint
-    // only while it's your buzz (.keys-armed). Lets a set be called as
-    // three keystrokes instead of arrow-walking the grid.
-    if (!canSelectCard() || e.key.length !== 1) return;
-    const card = boardEl.querySelector(`.card[data-key="${e.key.toUpperCase()}"]`);
-    if (card && trySelectCard(card)) e.preventDefault();
   });
 
   // --- controls ------------------------------------------------------------
