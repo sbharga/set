@@ -43,6 +43,19 @@ def test_easy_bot_can_make_an_invalid_claim():
     assert not deck.is_set(*decision.cards)
 
 
+def test_incorrect_claims_are_randomized():
+    cards = list(range(12))
+    claims = {
+        decision.cards
+        for seed in range(30)
+        if (decision := choose_action(cards, BotDifficulty.EASY, Random(seed))).cards
+        is not None
+        and not deck.is_set(*decision.cards)
+    }
+
+    assert len(claims) > 1
+
+
 def test_bot_recognizes_a_board_without_three_cards_as_no_set():
     decision = choose_action([0, 1], BotDifficulty.EASY, Random(2))
 

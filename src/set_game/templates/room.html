@@ -108,10 +108,15 @@
       <h1 id="game-title" class="visually-hidden" tabindex="-1">SET match</h1>
       <div class="stage">
         <div id="stage-caption" class="stage-caption">
-          <span id="buzz-caption" class="buzz-caption" hidden>
-            <strong id="buzz-caption-name"></strong> is choosing cards ·
-            <span id="buzz-caption-seconds"></span>s
-          </span>
+          <div id="buzz-caption" class="buzz-caption" hidden>
+            <span class="buzz-caption-text">
+              <strong id="buzz-caption-name"></strong> is choosing cards ·
+              <span id="buzz-caption-seconds"></span>s
+            </span>
+            <span class="buzz-bar" aria-hidden="true">
+              <span id="buzz-bar-fill" class="buzz-bar-fill"></span>
+            </span>
+          </div>
           <span id="reveal-caption" class="reveal-caption" hidden>
             <strong class="reveal-credit" id="reveal-credit"></strong>
             <span id="reveal-features" class="reveal-features"></span>
@@ -120,41 +125,12 @@
         </div>
 
         <div class="board-stage">
-          <div class="board-frame">
-            <div
-              id="board"
-              class="board"
-              aria-label="Cards in play"
-              role="group"
-            ></div>
-            <svg
-              id="buzz-frame"
-              class="buzz-frame"
-              viewBox="0 0 100 100"
-              preserveAspectRatio="none"
-              aria-hidden="true"
-              hidden
-            >
-              <rect
-                class="buzz-frame-track"
-                x="1.5"
-                y="1.5"
-                width="97"
-                height="97"
-                rx="6"
-              ></rect>
-              <rect
-                id="buzz-frame-progress"
-                class="buzz-frame-progress"
-                x="1.5"
-                y="1.5"
-                width="97"
-                height="97"
-                rx="6"
-                pathLength="1"
-              ></rect>
-            </svg>
-          </div>
+          <div
+            id="board"
+            class="board"
+            aria-label="Cards in play"
+            role="group"
+          ></div>
         </div>
       </div>
 
