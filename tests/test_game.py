@@ -73,6 +73,29 @@ def test_remove_player_clears_buzz_and_reassigns_host():
     assert g.players[ids[1]].is_host is True
 
 
+def test_disconnecting_host_immediately_reassigns_host():
+    g, ids = make_game(n_players=2)
+
+    g.mark_disconnected(ids[0], time.monotonic())
+
+    assert g.players[ids[0]].is_host is False
+    assert g.players[ids[1]].is_host is True
+
+
+def test_first_player_to_reconnect_claims_host_when_room_is_hostless():
+    g, ids = make_game(n_players=2)
+    now = time.monotonic()
+    g.mark_disconnected(ids[0], now)
+    g.mark_disconnected(ids[1], now)
+
+    assert not any(player.is_host for player in g.players.values())
+
+    g.add_player(ids[1], sid="replacement-sid", name="Player 1")
+
+    assert g.players[ids[1]].is_host is True
+    assert sum(player.is_host for player in g.players.values()) == 1
+
+
 def test_buzz_locks_out_others():
     g, ids = make_game()
     g.start()

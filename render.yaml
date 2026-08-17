@@ -10,3 +10,5 @@ services:
         value: production
       - key: SECRET_KEY
         generateValue: true
+      - key: SET_TRUSTED_HOSTS
+        value: set-private.onrender.com

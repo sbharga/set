@@ -30,7 +30,7 @@
       class="panel nickname-gate home-step view"
       aria-labelledby="nickname-title"
     >
-      <h2 id="nickname-title">What should we call you?</h2>
+      <h2 id="nickname-title" tabindex="-1">What should we call you?</h2>
       <label class="field-label visually-hidden" for="nickname-input"
         >Your nickname</label
       >
@@ -71,7 +71,7 @@
       </div>
 
       <div class="section-heading-row lobby-heading">
-        <h2 id="ready-title">Bring your friends together</h2>
+        <h2 id="ready-title" tabindex="-1">Bring your friends together</h2>
         <span id="home-connection" class="connection-status" aria-live="polite"
           >Connecting</span
         >
@@ -105,7 +105,7 @@
             maxlength="10"
             enterkeyhint="go"
             placeholder="ABCDE234FG"
-            aria-describedby="lobby-error"
+            aria-describedby="room-code-error"
           />
           <button
             id="join-room-btn"
@@ -116,6 +116,7 @@
             Join game
           </button>
         </div>
+        <p id="room-code-error" class="field-error" role="alert" hidden></p>
       </div>
     </section>
   </div>

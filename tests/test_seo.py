@@ -58,3 +58,31 @@ def test_sitemap_contains_only_the_public_home_page(app):
     assert response.mimetype == "application/xml"
     assert "<loc>http://localhost/</loc>" in body
     assert "/room/" not in body
+
+
+def test_room_exposes_concise_accessible_game_status(app):
+    with app.test_client() as client:
+        response = client.get("/room/ABCDE234FG")
+
+    html = response.get_data(as_text=True)
+    assert 'id="game-status"' in html
+    assert 'id="game-status" class="visually-hidden" role="status"' in html
+    assert 'id="board"' in html
+    assert 'aria-label="Cards in play"' in html
+    assert 'aria-keyshortcuts="Space"' in html
+    assert 'aria-keyshortcuts="N"' in html
+
+
+def test_production_https_uses_transport_security_headers(monkeypatch):
+    monkeypatch.setenv("SET_ENV", "production")
+    monkeypatch.setenv("SECRET_KEY", "test-secret")
+    monkeypatch.setenv("SET_TRUSTED_HOSTS", "example.test")
+    production_app = create_app()
+
+    with production_app.test_client() as client:
+        response = client.get("/", base_url="https://example.test")
+
+    assert response.status_code == 200
+    assert response.headers["Strict-Transport-Security"].startswith(
+        "max-age=31536000"
+    )

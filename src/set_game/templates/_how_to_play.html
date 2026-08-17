@@ -13,6 +13,7 @@
         type="button"
         data-close-modal
         aria-label="Close how to play"
+        aria-keyshortcuts="Escape"
       >
         ✕
       </button>
@@ -24,11 +25,11 @@
         Never two-and-one.
       </p>
 
-      <div class="htp-features" aria-label="The four card features">
-        <div><strong>Shape</strong><br />oval, diamond, squiggle</div>
-        <div><strong>Color</strong><br />three colors</div>
-        <div><strong>Number</strong><br />one, two, three</div>
-        <div><strong>Fill</strong><br />solid, striped, open</div>
+      <div class="htp-features" role="list" aria-label="The four card features">
+        <div role="listitem"><strong>Shape</strong><br />oval, diamond, squiggle</div>
+        <div role="listitem"><strong>Color</strong><br />three colors</div>
+        <div role="listitem"><strong>Number</strong><br />one, two, three</div>
+        <div role="listitem"><strong>Fill</strong><br />solid, striped, open</div>
       </div>
 
       <div class="htp-example">
@@ -65,8 +66,7 @@
         </li>
         <li>
           Can’t find any set? Choose <strong>No SET here</strong>. If everyone
-          agrees and the group is right, three cards are added. A wrong vote
-          costs 1 point.
+          agrees, three cards are added. Voting does not affect your score.
         </li>
         <li>
           When the deck is empty and no sets remain, the player with the most
@@ -74,7 +74,7 @@
         </li>
       </ol>
 
-      <div class="shortcut-row" aria-label="Keyboard shortcuts">
+      <div class="shortcut-row" role="group" aria-label="Keyboard shortcuts">
         <span><kbd>space</kbd> Find a SET</span>
         <span><kbd>N</kbd> No SET here</span>
         <span><kbd>M</kbd> Sound</span>
