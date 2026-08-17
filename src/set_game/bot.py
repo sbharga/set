@@ -27,9 +27,9 @@ class BotProfile:
 
 
 PROFILES = {
-    BotDifficulty.EASY: BotProfile(6.0, 9.0, 0.60),
-    BotDifficulty.MEDIUM: BotProfile(3.0, 5.0, 0.85),
-    BotDifficulty.HARD: BotProfile(1.0, 2.0, 1.0),
+    BotDifficulty.EASY: BotProfile(10.0, 15.0, 0.50),
+    BotDifficulty.MEDIUM: BotProfile(6.0, 10.0, 0.70),
+    BotDifficulty.HARD: BotProfile(3.5, 6.0, 0.85),
 }
 
 

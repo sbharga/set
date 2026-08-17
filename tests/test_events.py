@@ -248,6 +248,7 @@ def test_one_human_and_hard_bot_play_through_normal_events(app, monkeypatch):
 
     game = registry.create_room()
     game.rng = Random(2)
+    game.bot_rng = Random(1)
     host = socketio.test_client(app)
 
     def run_immediately(target, *args, **kwargs):
