@@ -43,7 +43,12 @@ function generateSecureToken() {
 document.addEventListener("DOMContentLoaded", () => {
   const root = document.getElementById("room-root");
   const roomCode = root.dataset.roomCode;
-  document.getElementById("invite-code").textContent = roomCode;
+  // Purely cosmetic chunking so the code is easier to read aloud/copy by
+  // eye -- copyText() below always uses the unbroken `roomCode`.
+  document.getElementById("invite-code").textContent =
+    roomCode.length === 10
+      ? `${roomCode.slice(0, 5)} ${roomCode.slice(5)}`
+      : roomCode;
   const NICK_KEY = "set_nickname";
   const PID_KEY = `set_player_id_${roomCode}`;
   const TOKEN_KEY = `set_player_token_${roomCode}`;
@@ -127,9 +132,16 @@ document.addEventListener("DOMContentLoaded", () => {
       const heading = views[name].querySelector("h1, h2, [role='heading']");
       requestAnimationFrame(() => heading?.focus());
     }
+    // The board is sized from its container's measured rect (sizeBoard,
+    // below); that rect is 0x0 while game-view is [hidden], so the very
+    // first render after joining needs an explicit re-measure once it's
+    // actually visible. (ResizeObserver also fires on this transition,
+    // this just avoids waiting on its async callback.)
+    if (changed && name === "game") requestAnimationFrame(() => sizeBoard());
   }
 
   const boardEl = document.getElementById("board");
+  const boardStageEl = document.querySelector(".board-stage");
   const playersEl = document.getElementById("players");
   const buzzBtn = document.getElementById("buzz-btn");
   const buzzLabelEl = buzzBtn.querySelector(".btn-label");
@@ -137,13 +149,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const noSetVoteStatusEl = document.getElementById("no-set-vote-status");
   const deckStatusEl = document.getElementById("deck-status");
   const deckCountEl = document.getElementById("deck-count");
-  const statusRailEl = document.getElementById("status-rail");
-  const railTimerName = document.getElementById("rail-timer-name");
-  const railTimerSeconds = document.getElementById("rail-timer-seconds");
-  const buzzRingProgress = document.getElementById("buzz-ring-progress");
-  const revealOverlay = document.getElementById("reveal-overlay");
+  const stageCaptionEl = document.getElementById("stage-caption");
+  const buzzCaptionEl = document.getElementById("buzz-caption");
+  const buzzCaptionNameEl = document.getElementById("buzz-caption-name");
+  const buzzCaptionSecondsEl = document.getElementById("buzz-caption-seconds");
+  const buzzFrameEl = document.getElementById("buzz-frame");
+  const buzzFrameProgressEl = document.getElementById("buzz-frame-progress");
+  const revealCaptionEl = document.getElementById("reveal-caption");
   const revealCreditEl = document.getElementById("reveal-credit");
-  const revealCardsEl = document.getElementById("reveal-cards");
   const revealFeaturesEl = document.getElementById("reveal-features");
   const revealCountdownEl = document.getElementById("reveal-countdown");
   const toastEl = document.getElementById("toast");
@@ -151,10 +164,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const botDifficultySelect = document.getElementById("bot-difficulty-select");
   const botSettingStatusEl = document.getElementById("bot-setting-status");
 
-  const RING_CIRCUMFERENCE = 283; // 2 * pi * r45, matches the SVG circle
   const REDUCED_MOTION = window.matchMedia(
     "(prefers-reduced-motion: reduce)",
   ).matches;
+  const MOBILE_QUERY = window.matchMedia("(max-width: 640px)");
+  const ROW_KEYS = ["1234567", "QWERTYU", "ASDFGHJ"];
 
   let hasJoined = false;
   let connectionReady = false;
@@ -174,6 +188,20 @@ document.addEventListener("DOMContentLoaded", () => {
   let lastWholeSecond = null;
   let revealEndsAt = 0;
   const lockoutEndsAtByPlayer = {}; // player_id -> deadline
+
+  // The claim a reveal is celebrating, held back from the board until the
+  // reveal freeze ends so the found cards stay lit in place (not whisked
+  // away behind an overlay) and their vanish/recompact is visible when it
+  // finally happens. reveal_ended is the normal trigger; ensureTicking's
+  // loop and renderSnapshot are the fallbacks if that event is ever
+  // dropped (see reveal_ended below and the ensureTicking loop).
+  let pendingClaim = null;
+
+  // Waiting-room player rows that have already played their join
+  // animation once -- a fresh snapshot rebuilds every <li>, so this is
+  // what keeps the animation from replaying for players who were already
+  // in the room.
+  const seenWaitingPlayerIds = new Set();
 
   // The pending "no set" vote. Kept outside `latestSnapshot` because
   // `updateScoreboardFromPlayers` replaces player objects wholesale on
@@ -438,9 +466,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     revealEndsAt = performance.now() + data.reveal_ms;
+    // The vanish + recompact is deferred until the freeze actually ends
+    // (reveal_ended, or flushPendingClaim's fallback) so the found cards
+    // stay lit in place and that motion is visible instead of hidden
+    // behind an overlay.
+    pendingClaim = { removed: data.removed, board: data.board, added: data.added };
     showReveal(data.removed, nameFor(data.player_id));
     ensureTicking();
-    animateSetClaim(data.removed, data.board, data.added);
     announce(`${nameFor(data.player_id)} found a valid set and earned one point.`);
     SetAudio.validSet();
   });
@@ -479,7 +511,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   socket.on("reveal_ended", (data) => {
     revealEndsAt = 0;
-    hideReveal();
+    flushPendingClaim();
     updateScoreboardFromPlayers(data.players);
     announce("Cards are available again.");
   });
@@ -580,8 +612,13 @@ document.addEventListener("DOMContentLoaded", () => {
     // client can't buzz early -- reveal_remaining_ms carries the residual.
     revealEndsAt =
       snapshot.reveal_remaining_ms > 0 ? now + snapshot.reveal_remaining_ms : 0;
+    // A full snapshot is authoritative on its own (syncBoard below
+    // reconciles straight to snapshot.board), so any claim animation this
+    // client was mid-deferring is moot -- discard it rather than risk
+    // replaying it against now-stale card codes.
+    pendingClaim = null;
     if (!revealEndsAt) hideReveal();
-    else if (revealOverlay.hidden) showReveal([], "A player");
+    else if (revealCaptionEl.hidden) showReveal([], "A player");
     // Restore a pending no-set vote on (re)connect rather than resetting
     // to 0 -- the tally is room state, not something this client owns.
     noSetVoters = new Set(
@@ -641,6 +678,13 @@ document.addEventListener("DOMContentLoaded", () => {
     list.replaceChildren();
     snapshot.players.forEach((p) => {
       const li = document.createElement("li");
+      // The list is rebuilt from scratch on every render, so gate the
+      // entrance animation on a persisted seen-IDs set -- otherwise every
+      // row would replay it on every unrelated update (e.g. someone else
+      // changing the bot difficulty).
+      if (!REDUCED_MOTION && !seenWaitingPlayerIds.has(p.player_id)) {
+        li.classList.add("player-enter");
+      }
       const title = document.createElement("span");
       title.className = "row-title";
       title.textContent = p.name;
@@ -654,6 +698,7 @@ document.addEventListener("DOMContentLoaded", () => {
       li.append(title, actions);
       list.appendChild(li);
     });
+    snapshot.players.forEach((p) => seenWaitingPlayerIds.add(p.player_id));
     if (focusedPlayerId) {
       list
         .querySelector(`.kick-player[data-player-id="${focusedPlayerId}"]`)
@@ -925,6 +970,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateBoardInteractivity() {
     const canSelect = canSelectCard();
+    boardEl.classList.toggle("keys-armed", canSelect);
     const cards = [...boardEl.querySelectorAll(".card")];
     if (
       canSelect &&
@@ -966,13 +1012,14 @@ document.addEventListener("DOMContentLoaded", () => {
   function updateBuzzRing(now) {
     const left = Math.max(0, buzzDeadline - now);
     const fraction = buzzDurationMs ? Math.min(1, left / buzzDurationMs) : 0;
-    buzzRingProgress.style.strokeDashoffset = String(
-      RING_CIRCUMFERENCE * (1 - fraction),
-    );
+    // pathLength="1" on the <rect>s in room.html normalizes the perimeter
+    // to 1 regardless of the board's actual (JS-sized) box, so the drain
+    // fraction maps straight to stroke-dashoffset -- no perimeter math.
+    buzzFrameProgressEl.style.strokeDashoffset = String(1 - fraction);
     const urgent = left <= 3000;
-    buzzRingProgress.classList.toggle("urgent", urgent);
+    buzzFrameProgressEl.classList.toggle("urgent", urgent);
     const wholeSecond = Math.ceil(left / 1000);
-    railTimerSeconds.textContent = wholeSecond;
+    buzzCaptionSecondsEl.textContent = wholeSecond;
     if (
       wholeSecond !== lastWholeSecond &&
       wholeSecond <= 3 &&
@@ -1010,6 +1057,12 @@ document.addEventListener("DOMContentLoaded", () => {
     if (tickHandle) return;
     const run = () => {
       const now = performance.now();
+      // Fallback for a dropped reveal_ended: the server is still the
+      // source of truth (see the module comment at the top of this file),
+      // but if its event never lands, this local deadline is what
+      // guarantees the found cards don't stay lit and the board doesn't
+      // stay frozen forever.
+      if (revealEndsAt && now >= revealEndsAt) flushPendingClaim();
       if (latestSnapshot && latestSnapshot.buzz) updateBuzzRing(now);
       updateControlsEnabled(now);
       updateLockoutTiles(now);
@@ -1027,6 +1080,95 @@ document.addEventListener("DOMContentLoaded", () => {
       : requestAnimationFrame(run);
   }
 
+  // --- board sizing + keyboard grid --------------------------------------
+
+  /** Measures .board-stage (a flex box that always fills the remaining
+   * stage space regardless of the board's own size -- no feedback loop)
+   * and picks the row/column split and card width that best fills it for
+   * `count` cards, replacing the old hand-tuned dvh/vw clamp guess and the
+   * board-large/xlarge/xxlarge density classes it required. Mobile stays
+   * fixed at 3 columns (that axis is a real layout-mode switch, handled in
+   * CSS); desktop searches a small range of row counts for the one that
+   * yields the biggest card. */
+  function sizeBoard(count) {
+    const n = count || boardEl.children.length;
+    if (!n) return;
+    const frameRect = boardStageEl.getBoundingClientRect();
+    if (frameRect.width < 1 || frameRect.height < 1) return;
+    const gap = Math.max(8, Math.min(window.innerWidth * 0.013, 16));
+    const mobile = MOBILE_QUERY.matches;
+    let rows;
+    let width;
+    if (mobile) {
+      const cols = 3;
+      rows = Math.max(1, Math.ceil(n / cols));
+      const wFromWidth = (frameRect.width - (cols - 1) * gap) / cols;
+      const wFromHeight =
+        ((frameRect.height - (rows - 1) * gap) / rows) * (3 / 4);
+      width = Math.min(wFromWidth, wFromHeight);
+    } else {
+      let best = null;
+      const maxRows = Math.min(Math.max(n, 3), 8);
+      for (let r = 3; r <= maxRows; r++) {
+        const cols = Math.ceil(n / r);
+        const wFromWidth = (frameRect.width - (cols - 1) * gap) / cols;
+        const wFromHeight =
+          ((frameRect.height - (r - 1) * gap) / r) * (3 / 4);
+        const candidate = Math.min(wFromWidth, wFromHeight);
+        if (candidate > 0 && (!best || candidate > best.width))
+          best = { rows: r, width: candidate };
+      }
+      ({ rows, width } = best || { rows: 3, width: 88 });
+    }
+    const clamped = Math.max(72, Math.min(165, width));
+    boardEl.style.setProperty("--card-w", `${clamped}px`);
+    if (!mobile) boardEl.style.setProperty("--board-rows", String(rows));
+  }
+
+  /** Maps each card to a key by its *measured* grid position (row-grouped
+   * by rect.top, then column-ordered by rect.left) rather than DOM order,
+   * so it's correct in both the desktop column-flow and phone row-flow
+   * layouts. Only cards within the first three rows get a key -- that
+   * covers any real board (7 columns is above the widest layout ever
+   * reaches). Hints only render while `.keys-armed` is set (see
+   * updateBoardInteractivity), i.e. only during your own buzz window. */
+  function assignBoardKeys() {
+    const cards = [...boardEl.querySelectorAll(".card:not(.card-vanish)")];
+    const withRects = cards.map((el) => ({ el, rect: el.getBoundingClientRect() }));
+    withRects.sort((a, b) => a.rect.top - b.rect.top);
+    const rowGroups = [];
+    withRects.forEach((item) => {
+      const group = rowGroups.find(
+        (g) => Math.abs(g.top - item.rect.top) < item.rect.height * 0.4,
+      );
+      if (group) group.items.push(item);
+      else rowGroups.push({ top: item.rect.top, items: [item] });
+    });
+    rowGroups.forEach((group, rowIndex) => {
+      group.items.sort((a, b) => a.rect.left - b.rect.left);
+      const keys = ROW_KEYS[rowIndex] || "";
+      group.items.forEach((item, colIndex) => {
+        const key = keys[colIndex];
+        if (key) {
+          item.el.dataset.key = key;
+          item.el.setAttribute("aria-keyshortcuts", key);
+        } else {
+          delete item.el.dataset.key;
+          item.el.removeAttribute("aria-keyshortcuts");
+        }
+      });
+    });
+  }
+
+  function onBoardContainerResize() {
+    sizeBoard();
+    assignBoardKeys();
+  }
+  if (typeof ResizeObserver !== "undefined") {
+    new ResizeObserver(onBoardContainerResize).observe(boardStageEl);
+  }
+  MOBILE_QUERY.addEventListener("change", onBoardContainerResize);
+
   // --- board rendering + FLIP animation ---------------------------------
 
   /** Reconciles the board to `cards`, reusing existing DOM nodes keyed by
@@ -1034,13 +1176,12 @@ document.addEventListener("DOMContentLoaded", () => {
    * shift position (the board recompacting after a claim) glide there via
    * FLIP instead of teleporting; `enterCodes` get the deal-in animation. */
   function syncBoard(cards, enterCodes) {
-    boardEl.classList.toggle("board-large", cards.length > 12);
-    boardEl.classList.toggle("board-xlarge", cards.length > 15);
-    boardEl.classList.toggle("board-xxlarge", cards.length > 18);
-    boardEl.style.setProperty(
-      "--board-rows",
-      String(cards.length > 18 ? Math.ceil(cards.length / 6) : 3),
-    );
+    // Applied before the FLIP "First" capture below, mirroring how the
+    // density classes this replaced were toggled at this same point: a
+    // custom-property size change is a hard cut (no DOM mutation, nothing
+    // for FLIP to invert), so it can land before First without disturbing
+    // the position-only glide FLIP animates afterward.
+    sizeBoard(cards.length);
     const enterSet = new Set(enterCodes || []);
     const existing = new Map();
     boardEl
@@ -1086,6 +1227,16 @@ document.addEventListener("DOMContentLoaded", () => {
       else boardEl.prepend(el);
       cursor = el;
     });
+
+    // Read positions here, before the FLIP block below applies any
+    // transform: getBoundingClientRect() reports the *visual* (transformed)
+    // position, and a card mid-glide would still visually be at its old
+    // spot for the next ~400ms -- reassigning keys after that point would
+    // key off stale positions. Right here the grid has already reflowed to
+    // its final layout (sizeBoard ran at the top of this function) but no
+    // FLIP transform has been applied yet, so this is the one moment that's
+    // both final and untransformed.
+    assignBoardKeys();
 
     if (!REDUCED_MOTION) {
       // Deal-in cards animate from the deck count in the header.
@@ -1300,45 +1451,74 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
+  /** Lights the found cards up in place on the board (instead of the old
+   * overlay's duplicate row) and dims the rest via .board.revealing, so
+   * you learn *where* the set was. The actual vanish + recompact is
+   * deferred until the freeze ends -- see set_claimed/reveal_ended and
+   * flushPendingClaim -- so that motion is visible too, not hidden behind
+   * a backdrop. */
   function showReveal(cards, finderName) {
     revealCreditEl.textContent =
       cards.length > 0 ? `${finderName} found a set!` : "A set was found!";
 
-    revealCardsEl.replaceChildren();
+    boardEl.classList.add("revealing");
+    boardEl
+      .querySelectorAll(".card.card-found")
+      .forEach((el) => el.classList.remove("card-found"));
     cards.forEach((c) => {
-      const el = buildCardElement(c);
-      el.tabIndex = -1;
-      el.setAttribute("role", "img");
-      el.removeAttribute("aria-pressed");
-      revealCardsEl.appendChild(el);
+      boardEl
+        .querySelector(`.card[data-code="${c.code}"]`)
+        ?.classList.add("card-found");
     });
 
     revealFeaturesEl.replaceChildren();
     (cards.length === 3 ? describeFeatures(cards) : []).forEach((f, i) => {
       const span = document.createElement("span");
       span.className = `reveal-feature ${f.allSame ? "all-same" : "all-diff"}`;
-      span.style.animationDelay = REDUCED_MOTION ? "0ms" : `${0.3 + i * 0.12}s`;
+      span.style.animationDelay = REDUCED_MOTION ? "0ms" : `${0.15 + i * 0.08}s`;
       const label = document.createElement("strong");
       label.textContent = f.label;
       span.append(label, ` ${f.allSame ? "all same" : "all different"}`);
       revealFeaturesEl.appendChild(span);
     });
 
-    revealOverlay.hidden = false;
+    buzzCaptionEl.hidden = true;
+    revealCaptionEl.hidden = false;
+    stageCaptionEl.classList.add("is-active");
   }
 
   function hideReveal() {
-    revealOverlay.hidden = true;
+    revealCaptionEl.hidden = true;
+    if (buzzCaptionEl.hidden) stageCaptionEl.classList.remove("is-active");
     revealCountdownEl.textContent = "";
+    boardEl.classList.remove("revealing");
+    boardEl
+      .querySelectorAll(".card.card-found")
+      .forEach((el) => el.classList.remove("card-found"));
   }
 
-  // --- buzz ring + rail --------------------------------------------------
+  /** The normal path out of a reveal: clears the freeze and plays the
+   * deferred vanish + recompact for the claim it was celebrating. Also
+   * the fallback path (see ensureTicking and renderSnapshot) for when
+   * reveal_ended never arrives. */
+  function flushPendingClaim() {
+    const claim = pendingClaim;
+    pendingClaim = null;
+    revealEndsAt = 0;
+    hideReveal();
+    if (claim) animateSetClaim(claim.removed, claim.board, claim.added);
+  }
+
+  // --- buzz timer: board perimeter + caption ------------------------------
 
   function startBuzzUI(data) {
     const amBuzzer = data.player_id === myPlayerId;
     boardEl.classList.toggle("dimmed", !amBuzzer);
-    statusRailEl.hidden = false;
-    railTimerName.textContent = amBuzzer ? "You" : data.name;
+    buzzFrameEl.hidden = false;
+    buzzCaptionNameEl.textContent = amBuzzer ? "You" : data.name;
+    revealCaptionEl.hidden = true;
+    buzzCaptionEl.hidden = false;
+    stageCaptionEl.classList.add("is-active");
     buzzDeadline = performance.now() + data.remaining_ms;
     lastWholeSecond = null;
     updateControlsEnabled();
@@ -1348,7 +1528,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function stopBuzzUI() {
     boardEl.classList.remove("dimmed");
-    statusRailEl.hidden = true;
+    buzzFrameEl.hidden = true;
+    buzzCaptionEl.hidden = true;
+    if (revealCaptionEl.hidden) stageCaptionEl.classList.remove("is-active");
     buzzDeadline = 0;
     updateControlsEnabled();
     updateBoardInteractivity();
@@ -1369,10 +1551,20 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.key === " " || e.code === "Space") {
       e.preventDefault();
       if (!controlsState(performance.now()).disabled) socket.emit("buzz");
-    } else if (e.key.toLowerCase() === "n") {
+      return;
+    }
+    if (e.key.toLowerCase() === "n") {
       if (!controlsState(performance.now()).voteDisabled)
         socket.emit("vote_no_set");
+      return;
     }
+    // Keyboard grid: each card in the board is mapped to a key by its
+    // measured row/column position (assignBoardKeys), rendered as a hint
+    // only while it's your buzz (.keys-armed). Lets a set be called as
+    // three keystrokes instead of arrow-walking the grid.
+    if (!canSelectCard() || e.key.length !== 1) return;
+    const card = boardEl.querySelector(`.card[data-key="${e.key.toUpperCase()}"]`);
+    if (card && trySelectCard(card)) e.preventDefault();
   });
 
   // --- controls ------------------------------------------------------------

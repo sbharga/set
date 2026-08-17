@@ -338,6 +338,7 @@ button {
   height: calc(100vh - 64px);
   height: calc(100dvh - 64px);
   min-height: 0;
+  padding-bottom: var(--space-5);
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -735,32 +736,33 @@ kbd {
 .waiting-heading .subtitle {
   margin-bottom: 0;
 }
-.invite-row {
+/* One hairline rhythm for the whole waiting room: the invite code is the
+   hero (it's what people read aloud to friends), everything else -- the
+   player list and the bot setting -- follows the same single-rule idiom
+   instead of three different container styles stacked in one screen. */
+.invite-block {
   margin-bottom: var(--space-5);
-  padding: var(--space-4) 0;
-  border-top: 1px solid var(--border);
+  padding-bottom: var(--space-5);
   border-bottom: 1px solid var(--border);
   display: flex;
   flex-direction: column;
-  align-items: stretch;
+  align-items: center;
   gap: var(--space-3);
   text-align: center;
 }
-.invite-row .field-label {
+.invite-block .field-label {
   margin: 0;
-  text-align: center;
 }
 .invite-code {
-  align-self: center;
   padding: 0;
   color: var(--accent);
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: var(--text-lg);
-  letter-spacing: 0.1em;
+  font-size: clamp(24px, 5vw, 34px);
+  font-weight: 700;
+  letter-spacing: 0.12em;
 }
 .invite-copy-btn {
   min-width: 210px;
-  align-self: center;
 }
 .manual-copy {
   width: 100%;
@@ -779,13 +781,25 @@ kbd {
 .waiting-view .row-list li {
   min-height: 52px;
 }
-.bot-config {
-  min-height: 46px;
-  margin-bottom: var(--space-4);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.55);
+@media (prefers-reduced-motion: no-preference) {
+  .waiting-view .row-list li.player-enter {
+    animation: player-row-in var(--dur-med) var(--ease-spring);
+  }
+}
+@keyframes player-row-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.bot-row {
+  margin: var(--space-4) 0;
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -813,10 +827,10 @@ kbd {
   opacity: 0.75;
 }
 .bot-setting-status {
-  min-width: 122px;
+  min-width: 100%;
   color: var(--ink-soft);
   font-size: var(--text-xs);
-  text-align: right;
+  text-align: left;
 }
 .tag-bot {
   color: var(--success);
@@ -841,18 +855,63 @@ kbd {
   min-height: 0;
   flex: 1;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: clamp(22px, 4vw, 48px);
+  gap: var(--space-2);
+}
+/* Fixed-height reservation so the board's available space never changes
+   when a buzz starts/ends or a reveal begins -- only the text inside this
+   bar changes, the bar itself is always present. See .card-found and
+   .buzz-frame below for how the timer and reveal now live on the board
+   itself instead of in a floating pill. */
+.stage-caption {
+  min-height: 40px;
+  padding: 2px var(--space-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  row-gap: 2px;
+  gap: var(--space-3);
+  color: var(--ink-soft);
+  font-size: var(--text-sm);
+  text-align: center;
+  opacity: 0;
+  transition: opacity var(--dur-fast) ease;
+}
+.stage-caption.is-active {
+  opacity: 1;
+}
+.stage-caption strong {
+  color: var(--ink);
+  font-weight: 650;
+}
+/* Pure measurement box: always fills the remaining stage space regardless
+   of the board's own (JS-computed) size, so game.js can read its rect to
+   size cards without a feedback loop. */
+.board-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* Shrink-wraps tightly to the rendered board so the buzz-frame overlay
+   lines up with the actual card grid, not the wider measurement box. */
+.board-frame {
+  position: relative;
+  display: inline-block;
 }
 .board {
   --board-gap: clamp(8px, 1.3vw, 16px);
-  flex: 0 1 auto;
-  min-width: 0;
   display: grid;
-  grid-template-rows: repeat(3, auto);
+  grid-template-rows: repeat(var(--board-rows, 3), auto);
   grid-auto-flow: column;
-  grid-auto-columns: clamp(88px, min(10.5vw, 14.5dvh), 142px);
+  grid-auto-columns: var(--card-w, clamp(88px, min(10.5vw, 14.5dvh), 142px));
   justify-content: center;
   align-content: center;
   gap: var(--board-gap);
@@ -860,32 +919,14 @@ kbd {
     filter var(--dur-med) ease,
     opacity var(--dur-med) ease;
 }
-.board.board-large,
-.board.board-xlarge,
-.board.board-xxlarge {
-  width: 100%;
-  grid-auto-columns: minmax(0, 1fr);
-}
-.board.board-large {
-  max-width: 760px;
-}
-.board.board-xlarge {
-  max-width: 870px;
-}
-.board.board-xxlarge {
-  max-width: 100%;
-}
-@media (min-width: 641px) {
-  .board.board-xxlarge {
-    width: max-content;
-    max-width: none;
-    grid-template-rows: repeat(var(--board-rows, 3), auto);
-    grid-auto-columns: clamp(72px, 9vw, 120px);
-  }
-}
 .board.dimmed {
   filter: saturate(0.4);
   opacity: 0.5;
+  pointer-events: none;
+}
+.board.revealing .card:not(.card-found) {
+  filter: saturate(0.35) brightness(0.94);
+  opacity: 0.55;
   pointer-events: none;
 }
 .card {
@@ -929,6 +970,25 @@ kbd {
 .card[data-color-category="purple"]::after {
   content: "III";
 }
+/* Keyboard grid hint: only rendered while it's your buzz (.keys-armed,
+   toggled alongside every other interactivity flag in
+   updateBoardInteractivity) and only on cards that got a key assigned. */
+.card::before {
+  content: attr(data-key);
+  position: absolute;
+  bottom: 5px;
+  left: 7px;
+  color: var(--ink-faint);
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1;
+  text-transform: uppercase;
+  opacity: 0;
+  transition: opacity var(--dur-fast) ease;
+}
+.board.keys-armed .card[data-key]::before {
+  opacity: 0.72;
+}
 .board .card {
   width: 100%;
 }
@@ -958,6 +1018,18 @@ kbd {
 .card.not-interactive:hover {
   transform: none;
   box-shadow: var(--shadow-card);
+}
+/* The set-reveal now lights the found cards up in place on the board
+   (instead of duplicating them into an overlay), so their vanish and the
+   board's recompaction stay visible -- see .board.revealing above and
+   showReveal()/reveal_ended in game.js. */
+.card.card-found {
+  box-shadow:
+    0 0 0 3px var(--success-soft),
+    0 0 0 5px var(--success),
+    var(--shadow-card-lift);
+  transform: translateY(-4px) scale(1.02);
+  z-index: 2;
 }
 
 @keyframes card-select-pop {
@@ -1075,79 +1147,37 @@ kbd {
   }
 }
 
-.rail {
-  flex: 0 0 140px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-4);
+/* The buzz countdown drains around the board's own perimeter instead of a
+   floating pill, so it's visible in peripheral vision while you scan
+   cards. Normalized via pathLength="1" on the <rect>s in room.html, so the
+   drain fraction maps straight to stroke-dashoffset at any board size --
+   no perimeter math needed here. */
+.buzz-frame {
+  position: absolute;
+  inset: -9px;
+  z-index: 1;
+  pointer-events: none;
 }
-.rail-timer {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: var(--space-2);
-  animation: rail-timer-in var(--dur-med) var(--ease-spring);
-}
-@keyframes rail-timer-in {
-  from {
-    opacity: 0;
-    transform: scale(0.85);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-.rail-ring-wrap {
-  position: relative;
-  width: 108px;
-  height: 108px;
-}
-.buzz-ring {
-  width: 100%;
-  height: 100%;
-  transform: rotate(-90deg);
-}
-.buzz-ring-track {
+.buzz-frame-track {
   fill: none;
   stroke: var(--border);
-  stroke-width: 6;
+  stroke-width: 2.5;
+  vector-effect: non-scaling-stroke;
 }
-.buzz-ring-progress {
+.buzz-frame-progress {
   fill: none;
   stroke: var(--accent);
-  stroke-width: 6;
+  stroke-width: 2.5;
   stroke-linecap: round;
-  stroke-dasharray: 283;
+  stroke-dasharray: 1;
   stroke-dashoffset: 0;
+  vector-effect: non-scaling-stroke;
   transition:
     stroke-dashoffset 0.1s linear,
     stroke var(--dur-med) ease;
 }
-.buzz-ring-progress.urgent {
+.buzz-frame-progress.urgent {
   stroke: #d97706;
-}
-.rail-timer-face {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: var(--text-xl);
-  font-weight: 650;
-}
-.rail-timer-label {
-  color: var(--ink-soft);
-  font-size: var(--text-sm);
-  text-align: center;
-}
-.rail-timer-label strong {
-  display: block;
-  color: var(--ink);
-  font-size: var(--text-md);
-  overflow-wrap: anywhere;
 }
 .deck-icon {
   width: 24px;
@@ -1159,66 +1189,23 @@ kbd {
     4px -4px 0 0 var(--ink-faint);
 }
 
-.reveal-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 6;
-  padding: var(--space-4);
-  border-radius: var(--radius-lg);
-  background: rgba(247, 246, 242, 0.94);
+.reveal-caption {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: center;
-  gap: var(--space-4);
-  -webkit-backdrop-filter: blur(5px);
-  backdrop-filter: blur(5px);
-  animation: reveal-in var(--dur-med) ease;
-}
-@keyframes reveal-in {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
+  gap: var(--space-1) var(--space-4);
 }
 .reveal-credit {
   margin: 0;
   color: var(--accent);
-  font-size: var(--text-lg);
   font-weight: 650;
-}
-.reveal-cards {
-  display: flex;
-  gap: var(--space-4);
-}
-.reveal-cards .card {
-  flex: 0 0 110px;
-  cursor: default;
-  animation: reveal-card-in var(--dur-med) var(--ease-spring) both;
-}
-.reveal-cards .card:nth-child(2) {
-  animation-delay: 0.08s;
-}
-.reveal-cards .card:nth-child(3) {
-  animation-delay: 0.16s;
-}
-@keyframes reveal-card-in {
-  from {
-    opacity: 0;
-    transform: scale(0.7) translateY(12px);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
 }
 .reveal-features {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 .reveal-feature {
   padding: var(--space-1) 0;
@@ -1635,45 +1622,6 @@ kbd {
     transform: scale(0.88);
     transform-origin: left bottom;
   }
-  .stage {
-    flex-direction: column;
-    justify-content: flex-start;
-    gap: var(--space-4);
-  }
-  .board {
-    width: min(100%, 544px);
-    grid-auto-columns: minmax(0, 1fr);
-  }
-  .board.board-large {
-    max-width: 650px;
-  }
-  .board.board-xlarge {
-    max-width: 740px;
-  }
-  .board.board-xxlarge {
-    max-width: 100%;
-  }
-  .rail {
-    width: 100%;
-    flex: 0 0 auto;
-    flex-direction: row;
-    justify-content: center;
-    gap: var(--space-6);
-  }
-  .rail-timer {
-    flex-direction: row;
-    gap: var(--space-3);
-  }
-  .rail-ring-wrap {
-    width: 56px;
-    height: 56px;
-  }
-  .rail-timer-face {
-    font-size: var(--text-md);
-  }
-  .rail-timer-label {
-    text-align: left;
-  }
 }
 
 /* Phones */
@@ -1788,16 +1736,17 @@ kbd {
   .waiting-heading .subtitle {
     margin-top: var(--space-1);
   }
-  .invite-row {
+  .invite-block {
     margin-bottom: var(--space-3);
-    padding: var(--space-3) 0;
+    padding-bottom: var(--space-3);
     gap: var(--space-2);
   }
   .waiting-view .row-list {
     max-height: 24dvh;
   }
-  .bot-config {
-    margin-bottom: var(--space-3);
+  .bot-row {
+    margin: var(--space-3) 0;
+    padding-top: var(--space-3);
     gap: var(--space-2);
   }
   .bot-setting-status {
@@ -1815,30 +1764,15 @@ kbd {
     gap: var(--space-3);
   }
   .board {
-    width: 100%;
-    max-width: 330px;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(3, var(--card-w, 96px));
     grid-template-rows: none;
     grid-auto-flow: row;
     grid-auto-columns: auto;
-    flex: 0 1 auto;
     gap: var(--space-2);
-  }
-  .board.board-large {
-    max-width: 260px;
-  }
-  .board.board-xlarge {
-    max-width: 215px;
-  }
-  .board.board-xxlarge {
-    max-width: 180px;
   }
   .board .card {
     min-width: 0;
     padding: var(--space-2);
-  }
-  .rail {
-    gap: var(--space-4);
   }
   .deck-icon {
     width: 18px;
@@ -1880,27 +1814,6 @@ kbd {
     min-height: 48px;
     padding: 10px 12px;
     font-size: var(--text-sm);
-  }
-  .reveal-overlay {
-    position: fixed;
-    inset: 58px 0 0;
-    z-index: 46;
-    padding: var(--space-4)
-      max(var(--space-4), env(safe-area-inset-right))
-      calc(var(--space-4) + env(safe-area-inset-bottom))
-      max(var(--space-4), env(safe-area-inset-left));
-    border-radius: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-  }
-  .reveal-cards {
-    width: min(100%, 330px);
-    gap: var(--space-2);
-  }
-  .reveal-cards .card {
-    min-width: 0;
-    max-width: 100px;
-    flex: 1 1 0;
   }
   .reveal-features {
     gap: 6px;
@@ -1972,18 +1885,6 @@ kbd {
     margin-top: var(--space-3);
     padding-top: var(--space-3);
   }
-  .game-view .board {
-    max-width: 270px;
-  }
-  .board.board-large {
-    max-width: 205px;
-  }
-  .board.board-xlarge {
-    max-width: 170px;
-  }
-  .board.board-xxlarge {
-    max-width: 145px;
-  }
 }
 
 @media (max-width: 640px) and (max-height: 620px) {
@@ -1994,19 +1895,19 @@ kbd {
     padding: var(--space-3);
   }
   .waiting-heading .subtitle,
-  .invite-row > .field-label {
+  .invite-block > .field-label {
     display: none;
   }
-  .invite-row {
-    padding: var(--space-2) 0;
+  .invite-block {
+    padding-bottom: var(--space-2);
     gap: 6px;
   }
   .waiting-view .row-list {
     max-height: 18dvh;
   }
-  .bot-config {
+  .bot-row {
     min-height: 40px;
-    margin-bottom: var(--space-2);
+    margin: var(--space-2) 0;
     padding-block: 4px;
   }
   .bot-setting-status {
@@ -2018,18 +1919,6 @@ kbd {
     overflow: hidden;
     clip: rect(0, 0, 0, 0);
     white-space: nowrap;
-  }
-  .game-view .board {
-    max-width: 210px;
-  }
-  .game-view .board.board-large {
-    max-width: 155px;
-  }
-  .game-view .board.board-xlarge {
-    max-width: 130px;
-  }
-  .game-view .board.board-xxlarge {
-    max-width: 110px;
   }
 }
 
@@ -2065,12 +1954,12 @@ kbd {
     margin-bottom: var(--space-2);
   }
   .waiting-heading .subtitle,
-  .invite-row > .field-label {
+  .invite-block > .field-label {
     display: none;
   }
-  .invite-row {
+  .invite-block {
     margin-bottom: var(--space-2);
-    padding: var(--space-2) 0;
+    padding-bottom: var(--space-2);
     flex-direction: row;
     align-items: center;
     justify-content: center;
@@ -2094,21 +1983,6 @@ kbd {
   }
   .waiting-view .row-list {
     max-height: 22dvh;
-  }
-  .stage {
-    flex-direction: row;
-  }
-  .board {
-    grid-auto-columns: 72px;
-    gap: var(--space-2);
-  }
-  .rail {
-    width: auto;
-    flex-direction: column;
-  }
-  .rail-ring-wrap {
-    width: 48px;
-    height: 48px;
   }
 }
 
@@ -2171,8 +2045,7 @@ kbd {
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
   }
-  .reveal-overlay,
-  .reveal-cards .card,
+  .reveal-caption,
   .reveal-feature {
     opacity: 1 !important;
     transform: none !important;
@@ -2182,7 +2055,7 @@ kbd {
   .card,
   .btn,
   .player-tile,
-  .invite-row,
+  .invite-block,
   .home-step {
     border: 1px solid CanvasText;
   }
@@ -2201,6 +2074,13 @@ kbd {
     outline-color: Mark;
     border-style: dashed;
   }
+  .card.card-found {
+    outline: 4px solid Highlight;
+    outline-offset: 2px;
+  }
+  .buzz-frame-progress {
+    stroke: Highlight;
+  }
   .player-tile.active-buzzer {
     outline: 3px solid Highlight;
     outline-offset: 2px;
@@ -2215,50 +2095,5 @@ kbd {
   #no-set-btn.voted {
     outline: 3px dashed Highlight;
     outline-offset: 2px;
-  }
-}
-
-/* The countdown floats above the stage instead of entering its flex layout.
-   Showing a buzz must never resize or reflow the card grid. */
-.stage .rail {
-  position: fixed;
-  right: auto;
-  bottom: max(16px, env(safe-area-inset-bottom));
-  left: 50%;
-  z-index: 46;
-  width: auto;
-  max-width: min(180px, calc(100vw - 32px));
-  padding: var(--space-2);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: rgba(247, 246, 242, 0.94);
-  box-shadow: var(--shadow-float);
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-  pointer-events: none;
-  transform: translateX(-50%);
-}
-.stage .rail-timer {
-  flex-direction: row;
-  gap: var(--space-2);
-}
-.stage .rail-ring-wrap {
-  width: 56px;
-  height: 56px;
-  flex: 0 0 56px;
-}
-.stage .rail-timer-face {
-  font-size: var(--text-md);
-}
-.stage .rail-timer-label {
-  min-width: 0;
-  text-align: left;
-}
-
-@media (max-width: 640px) {
-  .stage .rail {
-    right: auto;
-    bottom: calc(8px + env(safe-area-inset-bottom));
-    max-width: min(220px, calc(100vw - 24px));
   }
 }
