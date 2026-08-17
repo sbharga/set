@@ -6,9 +6,9 @@ from set_game.bot import BotDifficulty, choose_action, reaction_delay
 
 def test_reaction_delays_stay_within_each_difficulty_range():
     expected = {
-        BotDifficulty.EASY: (6.0, 9.0),
-        BotDifficulty.MEDIUM: (3.0, 5.0),
-        BotDifficulty.HARD: (1.0, 2.0),
+        BotDifficulty.EASY: (10.0, 15.0),
+        BotDifficulty.MEDIUM: (6.0, 10.0),
+        BotDifficulty.HARD: (3.5, 6.0),
     }
 
     for difficulty, (minimum, maximum) in expected.items():
@@ -16,13 +16,22 @@ def test_reaction_delays_stay_within_each_difficulty_range():
         assert all(minimum <= delay <= maximum for delay in delays)
 
 
-def test_hard_bot_always_selects_a_valid_set():
+def test_hard_bot_can_select_a_valid_set():
     cards = list(range(12))
 
     decision = choose_action(cards, BotDifficulty.HARD, Random(1))
 
     assert decision.cards is not None
     assert deck.is_set(*decision.cards)
+
+
+def test_hard_bot_is_not_perfect():
+    cards = list(range(12))
+
+    decision = choose_action(cards, BotDifficulty.HARD, Random(2))
+
+    assert decision.cards is not None
+    assert not deck.is_set(*decision.cards)
 
 
 def test_easy_bot_can_make_an_invalid_claim():
