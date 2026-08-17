@@ -34,7 +34,7 @@
         </div>
       </div>
 
-      <div class="invite-row">
+      <div class="invite-block">
         <span class="field-label">Share this game</span>
         <span class="visually-hidden">Invite code:</span>
         <strong class="invite-code" id="invite-code"></strong>
@@ -59,7 +59,13 @@
         </div>
       </div>
 
-      <div class="bot-config">
+      <div class="section-heading-row">
+        <h2 class="section-label">Who’s playing</h2>
+        <span id="player-count" class="count-pill">0 of 8</span>
+      </div>
+      <ul id="waiting-player-list" class="row-list"></ul>
+
+      <div class="bot-row">
         <label class="bot-config-label" for="bot-difficulty-select">
           Computer player
         </label>
@@ -83,12 +89,6 @@
         >No bot is playing.</span>
       </div>
 
-      <div class="section-heading-row">
-        <h2 class="section-label">Who’s playing</h2>
-        <span id="player-count" class="count-pill">0 of 8</span>
-      </div>
-      <ul id="waiting-player-list" class="row-list"></ul>
-
       <p id="spectator-note" class="notice" hidden>
         This match has started, so you’re watching for now. You’ll get a seat
         next match.
@@ -107,46 +107,54 @@
     <section id="game-view" class="game-view view" aria-labelledby="game-title" hidden>
       <h1 id="game-title" class="visually-hidden" tabindex="-1">SET match</h1>
       <div class="stage">
-        <div
-          id="board"
-          class="board"
-          aria-label="Cards in play"
-          role="group"
-        ></div>
+        <div id="stage-caption" class="stage-caption">
+          <span id="buzz-caption" class="buzz-caption" hidden>
+            <strong id="buzz-caption-name"></strong> is choosing cards ·
+            <span id="buzz-caption-seconds"></span>s
+          </span>
+          <span id="reveal-caption" class="reveal-caption" hidden>
+            <strong class="reveal-credit" id="reveal-credit"></strong>
+            <span id="reveal-features" class="reveal-features"></span>
+            <span id="reveal-countdown" class="reveal-countdown"></span>
+          </span>
+        </div>
 
-        <aside id="status-rail" class="rail" aria-label="Match timer" hidden>
-          <div id="rail-timer" class="rail-timer">
-            <div class="rail-ring-wrap">
-              <svg class="buzz-ring" viewBox="0 0 100 100" aria-hidden="true">
-                <circle class="buzz-ring-track" cx="50" cy="50" r="45"></circle>
-                <circle
-                  id="buzz-ring-progress"
-                  class="buzz-ring-progress"
-                  cx="50"
-                  cy="50"
-                  r="45"
-                ></circle>
-              </svg>
-              <div class="rail-timer-face">
-                <span id="rail-timer-seconds"></span>
-              </div>
-            </div>
-            <div class="rail-timer-label">
-              <strong id="rail-timer-name"></strong>
-              <span>is choosing cards</span>
-            </div>
+        <div class="board-stage">
+          <div class="board-frame">
+            <div
+              id="board"
+              class="board"
+              aria-label="Cards in play"
+              role="group"
+            ></div>
+            <svg
+              id="buzz-frame"
+              class="buzz-frame"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              aria-hidden="true"
+              hidden
+            >
+              <rect
+                class="buzz-frame-track"
+                x="1.5"
+                y="1.5"
+                width="97"
+                height="97"
+                rx="6"
+              ></rect>
+              <rect
+                id="buzz-frame-progress"
+                class="buzz-frame-progress"
+                x="1.5"
+                y="1.5"
+                width="97"
+                height="97"
+                rx="6"
+                pathLength="1"
+              ></rect>
+            </svg>
           </div>
-        </aside>
-
-        <div
-          id="reveal-overlay"
-          class="reveal-overlay"
-          hidden
-        >
-          <p class="reveal-credit" id="reveal-credit"></p>
-          <div class="reveal-cards" id="reveal-cards"></div>
-          <div class="reveal-features" id="reveal-features"></div>
-          <p class="reveal-countdown" id="reveal-countdown"></p>
         </div>
       </div>
 

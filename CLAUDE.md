@@ -67,6 +67,6 @@ The board (`game.js`'s `syncBoard`) reconciles by diffing against existing DOM n
 
 Room codes exist only as the opaque `/room/<code>` URL path (so invite links work) — they are deliberately never rendered anywhere in the UI. Games are displayed and joined by title (`Game.title`, derived from the host's name), since this app targets small local/LAN groups, not public room browsing.
 
-### Gotcha: `hidden` attribute vs. explicit `display`
+### `hidden` attribute vs. explicit `display`
 
-Several views/sections are toggled via the DOM `hidden` property in JS. The browser's default `[hidden] { display: none }` UA rule loses to *any* page-authored rule that sets `display` on that same element, regardless of specificity — so any selector given an explicit `display` in `style.css` that is also toggled via `.hidden` in JS needs its own `.selector[hidden] { display: none; }` override (see `.game-view[hidden]`, `.rail-timer[hidden]`, `.reveal-overlay[hidden]`, `.modal-backdrop[hidden]` in `style.css`). Forgetting this override is a silent bug: the element stays laid out and visible underneath whatever should have replaced it.
+Several views/sections are toggled via the DOM `hidden` property in JS. The browser's default `[hidden] { display: none }` UA rule loses to *any* page-authored rule that sets `display` on that same element, regardless of specificity — but `style.css` has a global `[hidden] { display: none !important; }` rule, so this is handled once for every element and no per-selector override is needed.
