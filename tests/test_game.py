@@ -4,6 +4,7 @@ from random import Random
 import pytest
 
 from set_game import deck
+from set_game.bot import BOT_PLAYER_ID, BotDifficulty
 from set_game.game import (
     BOARD_MIN,
     BUZZ_SECONDS,
@@ -530,3 +531,69 @@ def test_spectators_are_not_match_winners():
     g._finish()
 
     assert g.winner_ids == [ids[0]]
+
+
+def test_bot_is_a_scored_seat_and_allows_solo_start():
+    g, ids = make_game(n_players=1)
+
+    bot_player = g.configure_bot(BotDifficulty.MEDIUM)
+
+    assert bot_player is not None
+    assert bot_player.player_id == BOT_PLAYER_ID
+    assert [p.player_id for p in g.active_players()] == [ids[0], BOT_PLAYER_ID]
+    snapshot = g.snapshot()
+    assert snapshot["bot_difficulty"] == "medium"
+    assert snapshot["players"][1]["is_bot"] is True
+    assert snapshot["players"][1]["bot_difficulty"] == "medium"
+
+
+def test_bot_uses_one_of_the_eight_room_seats():
+    g, _ids = make_game(n_players=7)
+    g.configure_bot(BotDifficulty.EASY)
+
+    with pytest.raises(ValueError, match="room full"):
+        g.add_player("eighth-human", sid="sid8", name="Eighth")
+
+
+def test_bot_cannot_become_host_when_the_human_host_disconnects():
+    g, ids = make_game(n_players=2)
+    g.configure_bot(BotDifficulty.HARD)
+
+    g.mark_disconnected(ids[0], time.monotonic())
+
+    assert g.players[ids[1]].is_host is True
+    assert g.players[BOT_PLAYER_ID].is_host is False
+
+
+def test_bot_setting_persists_across_play_again_and_can_be_removed():
+    g, _ids = make_game(n_players=1)
+    g.configure_bot(BotDifficulty.MEDIUM)
+    g.start()
+    g._finish()
+
+    g.reset_to_lobby()
+
+    assert g.bot_difficulty == BotDifficulty.MEDIUM
+    g.configure_bot(None)
+    assert g.bot_player is None
+    assert g.bot_difficulty is None
+
+
+def test_bot_configuration_is_lobby_only():
+    g, _ids = make_game(n_players=1)
+    g.start()
+
+    with pytest.raises(ValueError, match="lobby"):
+        g.configure_bot(BotDifficulty.EASY)
+
+
+def test_connected_bot_does_not_preserve_disconnected_finished_standings():
+    g, ids = make_game(n_players=1)
+    g.configure_bot(BotDifficulty.EASY)
+    g.start()
+    g._finish()
+    disconnected_at = time.monotonic()
+    g.mark_disconnected(ids[0], disconnected_at)
+
+    assert g.drop_stale_disconnects(disconnected_at + 61) == ids
+    assert list(g.players) == [BOT_PLAYER_ID]

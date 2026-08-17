@@ -1,6 +1,6 @@
 # SET — Versus Mode
 
-A real-time multiplayer implementation of the card game SET, built with Flask and Socket.IO. Create a private game, share its invite link (or its 10-character code), and race to find sets with friends. Rooms are never listed or discoverable from the home page.
+A real-time multiplayer implementation of the card game SET, built with Flask and Socket.IO. Create a private game, share its invite link (or its 10-character code), and race to find sets with friends or an optional computer player. Rooms are never listed or discoverable from the home page.
 
 ## How it plays
 
@@ -12,6 +12,8 @@ The board is shared and there are no turns — everyone searches at once. See a 
 - Think there's no set on the board at all? Press **No Set**. Right → **+1 point** and three more cards are dealt. Wrong → same penalty as a bad set.
 
 The match ends when the deck runs out and no set remains on the board. Most sets wins. Full rules (and the keyboard shortcuts: `space` to buzz, `N` for No Set, `M` to mute) are in the in-app "?" modal.
+
+The host can add a **SET Bot** from the waiting room at easy, medium, or hard difficulty. Harder bots recognize sets more reliably and react faster. The bot occupies one of the room's eight seats, participates in scoring and no-set votes, and stays configured for rematches until the host removes it.
 
 ## Running it
 
@@ -44,6 +46,7 @@ The tests cover the SET rule engine, game state machine, Socket.IO edge cases, a
 ```
 src/set_game/
   deck.py      # SET rule engine: cards, is_set, find_any_set
+  bot.py       # computer-player difficulty profiles and decisions
   game.py      # per-room state machine: buzz, scoring, deck, board
   rooms.py     # in-memory private-room registry and secure invite codes
   app.py       # Flask app factory

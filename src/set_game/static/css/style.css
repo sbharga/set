@@ -100,7 +100,7 @@ button {
   display: none !important;
 }
 
-:where(button, a, input):focus-visible {
+:where(button, a, input, select):focus-visible {
   outline: 3px solid var(--accent);
   outline-offset: 3px;
 }
@@ -778,6 +778,51 @@ kbd {
 }
 .waiting-view .row-list li {
   min-height: 52px;
+}
+.bot-config {
+  min-height: 46px;
+  margin-bottom: var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.55);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.bot-config-label {
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+.bot-difficulty-select {
+  min-height: 36px;
+  margin-left: auto;
+  padding: 5px 30px 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.bot-difficulty-select:disabled {
+  color: var(--ink-soft);
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+.bot-setting-status {
+  min-width: 122px;
+  color: var(--ink-soft);
+  font-size: var(--text-xs);
+  text-align: right;
+}
+.tag-bot {
+  color: var(--success);
+}
+.tag-bot-level {
+  color: var(--ink-faint);
 }
 
 /* Match */
@@ -1751,6 +1796,15 @@ kbd {
   .waiting-view .row-list {
     max-height: 24dvh;
   }
+  .bot-config {
+    margin-bottom: var(--space-3);
+    gap: var(--space-2);
+  }
+  .bot-setting-status {
+    min-width: 0;
+    flex: 1 1 100%;
+    text-align: left;
+  }
 
   .game-view {
     height: 100%;
@@ -1949,6 +2003,21 @@ kbd {
   }
   .waiting-view .row-list {
     max-height: 18dvh;
+  }
+  .bot-config {
+    min-height: 40px;
+    margin-bottom: var(--space-2);
+    padding-block: 4px;
+  }
+  .bot-setting-status {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
   }
   .game-view .board {
     max-width: 210px;
