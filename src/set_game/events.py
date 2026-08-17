@@ -114,6 +114,7 @@ def _allow_mutation(sid: str) -> bool:
 
 def _players_payload(game: Game, now: float) -> dict:
     return {
+        "title": game.title,
         "players": [p.to_dict(now) for p in game.players.values()],
         "winner_ids": list(game.winner_ids),
         "no_set_vote": {
@@ -127,14 +128,7 @@ def _emit_players_updated(game: Game, now: float) -> None:
     """Broadcast membership/score metadata without re-sending the board."""
     with game.lock:
         payload = _players_payload(game, now)
-    socketio.emit("players_updated", payload, to=game.room_code)
-
-
-def _broadcast_state(game: Game) -> None:
-    """Use only for phase transitions that require a fresh board snapshot."""
-    with game.lock:
-        payload = game.snapshot(_now())
-    socketio.emit("room_state", payload, to=game.room_code)
+        socketio.emit("players_updated", payload, to=game.room_code)
 
 
 def _error(message: str) -> None:
@@ -208,7 +202,7 @@ def _settle_no_set_vote(game: Game, now: float) -> None:
 
 
 @socketio.on("create_room")
-def on_create_room(data):
+def on_create_room(data=None):
     # The name is retained in the event for backwards-compatible clients,
     # but creating a private room does not publish or reserve a public seat.
     name = _text_field(data, "name")
@@ -219,7 +213,7 @@ def on_create_room(data):
 
 
 @socketio.on("join_room")
-def on_join_room(data):
+def on_join_room(data=None):
     room_code = _text_field(data, "room_code").upper()
     name = _text_field(data, "name")
     player_id = _text_field(data, "player_id")
@@ -234,13 +228,15 @@ def on_join_room(data):
     if not is_valid_room_code(room_code):
         return _error("That invite code is invalid.")
 
-    game = registry.get(room_code)
-    if not game:
-        return _error("This private game no longer exists.")
-
     auth_digest = _credential_digest(player_token)
     sid = _request_sid()
     with _membership_lock:
+        attached = _sid_index.get(sid)
+        if attached and attached != (room_code, player_id):
+            return _error("This browser is already in another player seat.")
+        game = registry.get(room_code)
+        if not game:
+            return _error("This private game no longer exists.")
         with game.lock:
             existing = game.players.get(player_id)
             if game.is_blocked(auth_digest):
@@ -255,19 +251,19 @@ def on_join_room(data):
             # connected player offline (and could even forfeit their buzz).
             previous_sid = existing.sid if existing and existing.connected else None
             game.add_player(player_id, sid, name, auth_digest)
+            # Subscribe before taking the recovery snapshot. Holding the game
+            # lock prevents a targeted room event from slipping into the gap.
+            sio_join_room(game.room_code)
             snapshot = game.snapshot(_now())
-        if previous_sid and previous_sid != sid:
-            _sid_index.pop(previous_sid, None)
-            socketio.server.disconnect(previous_sid, namespace="/")
-        _sid_index[sid] = (game.room_code, player_id)
-    sio_join_room(game.room_code)
-
-    emit("joined", {"player_id": player_id, "room_code": game.room_code})
-    # A joining browser needs a complete recovery snapshot, but existing
-    # players only need the small player-list delta; do not re-send a board
-    # of card dictionaries to every participant on routine joins.
-    emit("room_state", snapshot)
-    _emit_players_updated(game, _now())
+            if previous_sid and previous_sid != sid:
+                _sid_index.pop(previous_sid, None)
+                socketio.server.disconnect(previous_sid, namespace="/")
+            _sid_index[sid] = (game.room_code, player_id)
+            emit("joined", {"player_id": player_id, "room_code": game.room_code})
+            # A joining browser needs a complete recovery snapshot, but existing
+            # players only need the small player-list delta.
+            emit("room_state", snapshot)
+            _emit_players_updated(game, _now())
 
 
 @socketio.on("disconnect")
@@ -288,24 +284,20 @@ def on_disconnect():
         with game.lock:
             was_buzzing = bool(game.buzz and game.buzz.player_id == player_id)
             lockout_deadline = game.mark_disconnected(player_id, now)
-
-    _emit_players_updated(game, now)
-    if was_buzzing:
-        # mark_disconnected() clears the buzz same as any other forfeit;
-        # emit the granular state transition rather than re-sending a board.
-        socketio.emit("buzz_ended", {}, to=room_code)
+            _emit_players_updated(game, now)
+            if was_buzzing:
+                # mark_disconnected() clears the buzz same as any other forfeit;
+                # emit the granular state transition rather than re-sending a board.
+                socketio.emit("buzz_ended", {}, to=room_code)
+            _settle_no_set_vote(game, now)
     if lockout_deadline is not None:
         socketio.start_background_task(
             _watch_lockout, room_code, player_id, lockout_deadline
         )
-    # mark_disconnected() already dropped this player's own vote; the
-    # departure may also have shrunk the electorate enough to make a
-    # still-pending vote from the remaining players unanimous.
-    _settle_no_set_vote(game, now)
 
 
 @socketio.on("kick_player")
-def on_kick_player(data):
+def on_kick_player(data=None):
     """Allow the current host to permanently remove another room identity."""
     if not _mutation_allowed():
         return
@@ -336,8 +328,12 @@ def on_kick_player(data):
             target_sid = target.sid if target.connected else None
             was_buzzing = bool(game.buzz and game.buzz.player_id == target_id)
             game.remove_player(target_id)
-        if target_sid:
-            _sid_index.pop(target_sid, None)
+            if target_sid:
+                _sid_index.pop(target_sid, None)
+            _emit_players_updated(game, _now())
+            if was_buzzing:
+                socketio.emit("buzz_ended", {}, to=game.room_code)
+            _settle_no_set_vote(game, _now())
 
     if target_sid:
         socketio.emit(
@@ -346,10 +342,6 @@ def on_kick_player(data):
             to=target_sid,
         )
         socketio.server.disconnect(target_sid, namespace="/")
-    _emit_players_updated(game, _now())
-    if was_buzzing:
-        socketio.emit("buzz_ended", {}, to=game.room_code)
-    _settle_no_set_vote(game, _now())
 
 
 # --- game lifecycle --------------------------------------------------------
@@ -369,16 +361,28 @@ def _require_room(sid: str) -> tuple[Game, str] | None:
     return game, player_id
 
 
+def _is_current_socket(game: Game, player_id: str, sid: str) -> bool:
+    """Reject an action already in flight when a newer tab takes the seat."""
+    player = game.players.get(player_id)
+    if player and player.connected and player.sid == sid:
+        return True
+    _error("You are no longer in this game.")
+    return False
+
+
 @socketio.on("start_game")
 def on_start_game():
     if not _mutation_allowed():
         return
-    found = _require_room(_request_sid())
+    sid = _request_sid()
+    found = _require_room(sid)
     if not found:
         return
     game, player_id = found
 
     with game.lock:
+        if not _is_current_socket(game, player_id, sid):
+            return
         player = game.players.get(player_id)
         if not player or not player.is_host:
             return _error("Only the host can start the game.")
@@ -388,28 +392,29 @@ def on_start_game():
             return _error(f"Need at least {MIN_PLAYERS_TO_START} players to start.")
         game.start()
         snapshot = game.snapshot(_now())
-
-    socketio.emit("game_started", snapshot, to=game.room_code)
+        socketio.emit("game_started", snapshot, to=game.room_code)
 
 
 @socketio.on("play_again")
 def on_play_again():
     if not _mutation_allowed():
         return
-    found = _require_room(_request_sid())
+    sid = _request_sid()
+    found = _require_room(sid)
     if not found:
         return
     game, player_id = found
 
     with game.lock:
+        if not _is_current_socket(game, player_id, sid):
+            return
         player = game.players.get(player_id)
         if not player or not player.is_host:
             return _error("Only the host can start a new match.")
         if game.phase != Phase.FINISHED:
             return _error("Current match hasn't finished yet.")
         game.reset_to_lobby()
-
-    _broadcast_state(game)
+        socketio.emit("room_state", game.snapshot(_now()), to=game.room_code)
 
 
 # --- buzz / selection -----------------------------------------------------
@@ -419,29 +424,32 @@ def on_play_again():
 def on_buzz():
     if not _mutation_allowed():
         return
-    found = _require_room(_request_sid())
+    sid = _request_sid()
+    found = _require_room(sid)
     if not found:
         return
     game, player_id = found
     now = _now()
 
     with game.lock:
+        if not _is_current_socket(game, player_id, sid):
+            return
         reason = game.can_buzz(player_id, now)
         if reason:
             return _error(f"Can't buzz: {reason}.")
         buzz = game.start_buzz(player_id, now)
         player_name = game.players[player_id].name
 
-    socketio.emit(
-        "buzz_started",
-        {
-            "player_id": player_id,
-            "name": player_name,
-            "remaining_ms": int(BUZZ_SECONDS * 1000),
-            "duration_ms": int(BUZZ_SECONDS * 1000),
-        },
-        to=game.room_code,
-    )
+        socketio.emit(
+            "buzz_started",
+            {
+                "player_id": player_id,
+                "name": player_name,
+                "remaining_ms": int(BUZZ_SECONDS * 1000),
+                "duration_ms": int(BUZZ_SECONDS * 1000),
+            },
+            to=game.room_code,
+        )
     socketio.start_background_task(
         _watch_buzz_timeout, game.room_code, player_id, buzz.deadline
     )
@@ -462,14 +470,17 @@ def _watch_buzz_timeout(room_code: str, player_id: str, deadline: float) -> None
             players_payload = [p.to_dict(now) for p in game.players.values()]
             p = game.players.get(player_id)
             lockout_deadline = p.lockout_until if p else None
-
+            socketio.emit(
+                "set_rejected",
+                {
+                    "player_id": player_id,
+                    "reason": "timeout",
+                    "players": players_payload,
+                },
+                to=room_code,
+            )
+            socketio.emit("buzz_ended", {}, to=room_code)
     if acted:
-        socketio.emit(
-            "set_rejected",
-            {"player_id": player_id, "reason": "timeout", "players": players_payload},
-            to=room_code,
-        )
-        socketio.emit("buzz_ended", {}, to=room_code)
         if lockout_deadline is not None:
             socketio.start_background_task(
                 _watch_lockout, room_code, player_id, lockout_deadline
@@ -500,13 +511,11 @@ def _watch_lockout(room_code: str, player_id: str, deadline: float) -> None:
         acted = game.expire_lockout(player_id, deadline, now)
         if acted:
             players_payload = [p.to_dict(now) for p in game.players.values()]
-
-    if acted:
-        socketio.emit(
-            "cooldown_ended",
-            {"player_id": player_id, "players": players_payload},
-            to=room_code,
-        )
+            socketio.emit(
+                "cooldown_ended",
+                {"player_id": player_id, "players": players_payload},
+                to=room_code,
+            )
 
 
 def _watch_reveal(room_code: str, deadline: float) -> None:
@@ -523,16 +532,15 @@ def _watch_reveal(room_code: str, deadline: float) -> None:
         acted = game.expire_reveal(deadline, now)
         if acted:
             players_payload = [p.to_dict(now) for p in game.players.values()]
-
-    if acted:
-        socketio.emit("reveal_ended", {"players": players_payload}, to=room_code)
+            socketio.emit("reveal_ended", {"players": players_payload}, to=room_code)
 
 
 @socketio.on("select_card")
-def on_select_card(data):
+def on_select_card(data=None):
     if not _mutation_allowed():
         return
-    found = _require_room(_request_sid())
+    sid = _request_sid()
+    found = _require_room(sid)
     if not found:
         return
     game, player_id = found
@@ -543,6 +551,8 @@ def on_select_card(data):
     now = _now()
     preview_task = None
     with game.lock:
+        if not _is_current_socket(game, player_id, sid):
+            return
         original_deadline = game.buzz.deadline if game.buzz else None
         result = game.select(player_id, card_code, now, defer_resolution=True)
 
@@ -557,7 +567,12 @@ def on_select_card(data):
                 to=game.room_code,
             )
             if result == "selection-complete":
-                expected_cards = tuple(game.buzz.selection)
+                assert game.buzz is not None
+                expected_cards = (
+                    game.buzz.selection[0],
+                    game.buzz.selection[1],
+                    game.buzz.selection[2],
+                )
                 replacement_deadline = (
                     game.buzz.deadline
                     if game.buzz.deadline != original_deadline
@@ -604,6 +619,9 @@ def _resolve_selection_after_preview(
         return
 
     now = _now()
+    game_over_payload = None
+    reveal_deadline = 0.0
+    lockout_deadline = 0.0
     with game.lock:
         board_before = list(game.board)
         result = game.resolve_selection(player_id, expected_cards, now)
@@ -632,17 +650,18 @@ def _resolve_selection_after_preview(
             }
         else:
             return
-
+        if result == "resolved-valid":
+            socketio.emit("set_claimed", payload, to=room_code)
+            socketio.emit("buzz_ended", {}, to=room_code)
+            if game_over_payload:
+                socketio.emit("game_over", game_over_payload, to=room_code)
+        else:
+            socketio.emit("set_rejected", payload, to=room_code)
+            socketio.emit("buzz_ended", {}, to=room_code)
     if result == "resolved-valid":
-        socketio.emit("set_claimed", payload, to=room_code)
-        socketio.emit("buzz_ended", {}, to=room_code)
-        if game_over_payload:
-            socketio.emit("game_over", game_over_payload, to=room_code)
         if not game_over_payload:
             socketio.start_background_task(_watch_reveal, room_code, reveal_deadline)
     else:
-        socketio.emit("set_rejected", payload, to=room_code)
-        socketio.emit("buzz_ended", {}, to=room_code)
         socketio.start_background_task(
             _watch_lockout, room_code, player_id, lockout_deadline
         )
@@ -659,13 +678,16 @@ def on_vote_no_set():
     the deck is empty) -- see Game.toggle_no_set_vote for the rules."""
     if not _mutation_allowed():
         return
-    found = _require_room(_request_sid())
+    sid = _request_sid()
+    found = _require_room(sid)
     if not found:
         return
     game, player_id = found
     now = _now()
 
     with game.lock:
+        if not _is_current_socket(game, player_id, sid):
+            return
         board_before = list(game.board)
         result = game.toggle_no_set_vote(player_id, now)
 
@@ -693,18 +715,21 @@ def start_background_reaper(sio) -> None:
             sio.sleep(REAPER_INTERVAL_SECONDS)
             now = _now()
             for room_code in registry.all_room_codes():
-                game = registry.get(room_code)
-                if not game:
-                    continue
-                with game.lock:
-                    removed = game.drop_stale_disconnects(now)
-                    is_empty = (
-                        not game.players
-                        and (now - game.created_at) > ROOM_CREATION_GRACE_SECONDS
-                    )
-                if removed:
-                    _emit_players_updated(game, now)
-                if is_empty:
-                    registry.remove(room_code)
+                # Joining and collection are one membership transaction, so a
+                # successful join cannot be orphaned from the registry.
+                with _membership_lock:
+                    game = registry.get(room_code)
+                    if not game:
+                        continue
+                    with game.lock:
+                        removed = game.drop_stale_disconnects(now)
+                        is_empty = (
+                            not game.players
+                            and (now - game.created_at) > ROOM_CREATION_GRACE_SECONDS
+                        )
+                        if removed:
+                            _emit_players_updated(game, now)
+                        if is_empty:
+                            registry.remove(room_code)
 
     sio.start_background_task(_loop)

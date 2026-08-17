@@ -21,6 +21,29 @@ const DEFAULT_CARD_PALETTE = (() => {
 const CARD_PALETTE_KEY = "set_card_palette";
 const CARD_COLOR_NAMES = Object.keys(DEFAULT_CARD_PALETTE);
 const HEX_COLOR = /^#[0-9a-f]{6}$/i;
+const CARD_COLOR_LABELS = Object.freeze({
+  red: "first color",
+  green: "second color",
+  purple: "third color",
+});
+
+function colorsAreDistinct(colors) {
+  const channels = colors.map((hex) => [
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+  ]);
+  return channels.every((color, index) =>
+    channels.slice(index + 1).every((other) => {
+      const distance = Math.hypot(
+        color[0] - other[0],
+        color[1] - other[1],
+        color[2] - other[2],
+      );
+      return distance >= 70;
+    }),
+  );
+}
 
 function validCardPalette(value) {
   if (!value || typeof value !== "object") return null;
@@ -30,6 +53,8 @@ function validCardPalette(value) {
       return null;
     palette[name] = value[name].toLowerCase();
   }
+  if (!colorsAreDistinct(Object.values(palette)))
+    return null;
   return palette;
 }
 
@@ -100,6 +125,12 @@ function cardSVGMarkup(card) {
   return `<svg viewBox="0 0 160 220" aria-hidden="true" focusable="false">${uses}</svg>`;
 }
 
+function cardAccessibleLabel(card) {
+  const count = ["zero", "one", "two", "three"][card.number];
+  const shape = `${card.shape}${card.number > 1 ? "s" : ""}`;
+  return `${count} ${shape}, ${card.shading} fill, ${CARD_COLOR_LABELS[card.color]}`;
+}
+
 /** Builds a full `.card` element (unattached) for the given card data.
  * Focusable and activatable from the keyboard: Enter/Space triggers the
  * same "click" behavior the board's delegated listener already handles. */
@@ -107,11 +138,12 @@ function buildCardElement(card) {
   const el = document.createElement("div");
   el.className = "card";
   el.dataset.code = card.code;
+  el.dataset.colorCategory = card.color;
   el.tabIndex = 0;
   el.setAttribute("role", "button");
   el.setAttribute(
     "aria-label",
-    `${card.number} ${card.shading} ${card.color} ${card.shape}${card.number > 1 ? "s" : ""}`,
+    cardAccessibleLabel(card),
   );
   el.setAttribute("aria-pressed", "false");
   el.innerHTML = cardSVGMarkup(card);
@@ -125,10 +157,12 @@ document.addEventListener("DOMContentLoaded", () => {
   if (!toggle || !popover || !reset) return;
 
   const inputs = [...popover.querySelectorAll("input[data-card-color]")];
+  const paletteControl = toggle.closest(".palette-control");
 
   function syncInputs() {
     inputs.forEach((input) => {
       input.value = activeCardPalette[input.dataset.cardColor];
+      input.setCustomValidity("");
     });
   }
 
@@ -143,10 +177,23 @@ document.addEventListener("DOMContentLoaded", () => {
 
   inputs.forEach((input) => {
     input.addEventListener("input", () => {
-      saveCardPalette({
+      const palette = validCardPalette({
         ...activeCardPalette,
         [input.dataset.cardColor]: input.value,
       });
+      if (!palette) {
+        input.setCustomValidity("Choose three clearly different card colors.");
+        return;
+      }
+      input.setCustomValidity("");
+      saveCardPalette(palette);
+    });
+    input.addEventListener("change", () => {
+      if (!input.checkValidity()) {
+        input.reportValidity();
+        input.value = activeCardPalette[input.dataset.cardColor];
+        input.setCustomValidity("");
+      }
     });
   });
 
@@ -164,6 +211,27 @@ document.addEventListener("DOMContentLoaded", () => {
   document.addEventListener("pointerdown", (event) => {
     if (!popover.hidden && !event.target.closest(".palette-control"))
       setOpen(false);
+  });
+
+  paletteControl.addEventListener("focusout", () => {
+    queueMicrotask(() => {
+      if (!popover.hidden && !paletteControl.contains(document.activeElement))
+        setOpen(false);
+    });
+  });
+
+  document.addEventListener("set:close-card-palette", () => setOpen(false));
+
+  window.addEventListener("storage", (event) => {
+    if (event.key !== CARD_PALETTE_KEY) return;
+    let palette = null;
+    try {
+      palette = validCardPalette(JSON.parse(event.newValue));
+    } catch (_error) {
+      // Invalid changes from another tab restore the canonical palette.
+    }
+    applyCardPalette(palette || DEFAULT_CARD_PALETTE);
+    syncInputs();
   });
 
   document.addEventListener("keydown", (event) => {

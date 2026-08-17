@@ -7,13 +7,12 @@
 
 {% block topbar_actions %}
   <div
-    id="deck-status"
-    class="deck-status"
-    aria-label="Cards left in deck"
-    hidden
+      id="deck-status"
+      class="deck-status"
+      hidden
   >
     <span class="deck-icon" aria-hidden="true"></span>
-    <span><strong id="deck-count">0</strong> cards</span>
+    <span><strong id="deck-count">0</strong> cards left in deck</span>
   </div>
 {% endblock %}
 
@@ -21,14 +20,14 @@
   <div id="room-root" class="room" data-room-code="{{ room_code }}">
     <section id="connecting-view" class="center-panel view" aria-live="polite">
       <span class="loading-mark" aria-hidden="true"><i></i><i></i><i></i></span>
-      <h1 class="status-title">Joining the game…</h1>
+      <h1 id="connecting-title" class="status-title" tabindex="-1">Joining the game…</h1>
       <p>Getting your seat ready.</p>
     </section>
 
     <section id="waiting-view" class="waiting-view view" hidden>
       <div class="waiting-heading">
         <div>
-          <h1 class="game-title" id="waiting-title">Waiting room</h1>
+          <h1 class="game-title" id="waiting-title" tabindex="-1">Waiting room</h1>
           <p class="subtitle">
             Invite your crew, then start when everyone is here.
           </p>
@@ -40,11 +39,8 @@
 
       <div class="invite-row">
         <span class="field-label">Share this game</span>
-        <strong
-          class="invite-code"
-          id="invite-code"
-          aria-label="Invite code"
-        ></strong>
+        <span class="visually-hidden">Invite code:</span>
+        <strong class="invite-code" id="invite-code"></strong>
         <button
           id="copy-link-btn"
           class="btn btn-secondary invite-copy-btn"
@@ -70,7 +66,7 @@
         <h2 class="section-label">Who’s playing</h2>
         <span id="player-count" class="count-pill">0 of 8</span>
       </div>
-      <ul id="waiting-player-list" class="row-list" aria-live="polite"></ul>
+      <ul id="waiting-player-list" class="row-list"></ul>
 
       <p id="spectator-note" class="notice" hidden>
         This match has started, so you’re watching for now. You’ll get a seat
@@ -87,13 +83,14 @@
       </button>
     </section>
 
-    <section id="game-view" class="game-view view" hidden>
+    <section id="game-view" class="game-view view" aria-labelledby="game-title" hidden>
+      <h1 id="game-title" class="visually-hidden" tabindex="-1">SET match</h1>
       <div class="stage">
         <div
           id="board"
           class="board"
           aria-label="Cards in play"
-          aria-live="polite"
+          role="group"
         ></div>
 
         <aside id="status-rail" class="rail" aria-label="Match timer" hidden>
@@ -124,7 +121,6 @@
           id="reveal-overlay"
           class="reveal-overlay"
           hidden
-          aria-live="polite"
         >
           <p class="reveal-credit" id="reveal-credit"></p>
           <div class="reveal-cards" id="reveal-cards"></div>
@@ -136,10 +132,10 @@
       <div class="bottom">
         <section class="scoreboard" aria-labelledby="scoreboard-title">
           <h2 id="scoreboard-title" class="visually-hidden">Scores</h2>
-          <div class="players" id="players"></div>
+          <div class="players" id="players" role="list"></div>
         </section>
-        <div class="actions" aria-label="Game actions">
-          <button id="buzz-btn" class="btn btn-buzz" type="button">
+        <div class="actions" role="group" aria-label="Game actions">
+          <button id="buzz-btn" class="btn btn-buzz" type="button" aria-keyshortcuts="Space">
             <span class="btn-label">I found a SET!</span>
           </button>
           <div class="no-set-control">
@@ -148,6 +144,7 @@
               class="btn btn-secondary"
               type="button"
               title="Vote that there are no sets among the cards"
+              aria-keyshortcuts="N"
             >
               <span class="btn-label">No SET here</span>
             </button>
@@ -162,7 +159,7 @@
     </section>
 
     <section id="gameover-view" class="gameover-view view" hidden>
-      <h1 class="game-title">Great game</h1>
+      <h1 id="gameover-title" class="game-title" tabindex="-1">Great game</h1>
       <p id="winner-line" class="winner-line"></p>
       <h2 class="section-label">Final scores</h2>
       <ol id="standings-list" class="row-list standings-list"></ol>
@@ -184,7 +181,8 @@
       </p>
     </section>
 
-    <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+    <div id="toast" class="toast" hidden></div>
+    <div id="game-status" class="visually-hidden" role="status" aria-live="polite" aria-atomic="true" tabindex="-1"></div>
   </div>
 {% endblock %}
 

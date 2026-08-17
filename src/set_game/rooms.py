@@ -55,10 +55,6 @@ class RoomRegistry:
         with self._lock:
             self._rooms.pop(room_code.upper(), None)
 
-    def active_rooms(self) -> list[Game]:
-        with self._lock:
-            return [g for g in self._rooms.values() if g.players]
-
     def all_room_codes(self) -> list[str]:
         with self._lock:
             return list(self._rooms.keys())

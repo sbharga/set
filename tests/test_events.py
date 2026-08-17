@@ -148,3 +148,55 @@ def test_malformed_card_payload_returns_error_instead_of_crashing_handler(app):
         if client.is_connected():
             client.disconnect()
         registry.remove(game.room_code)
+
+
+def test_missing_payload_returns_error_instead_of_crashing_handler(app):
+    game = registry.create_room()
+    client = socketio.test_client(app)
+
+    try:
+        join(client, game.room_code)
+        client.get_received()
+
+        client.emit("select_card")
+
+        errors = [
+            event for event in client.get_received() if event["name"] == "action_error"
+        ]
+        assert errors[0]["args"][0]["message"] == "Invalid card."
+        assert client.is_connected() is True
+    finally:
+        if client.is_connected():
+            client.disconnect()
+        registry.remove(game.room_code)
+
+
+def test_one_socket_cannot_occupy_multiple_player_seats(app):
+    first_game = registry.create_room()
+    second_game = registry.create_room()
+    client = socketio.test_client(app)
+
+    try:
+        join(client, first_game.room_code)
+        client.get_received()
+
+        join(
+            client,
+            second_game.room_code,
+            player_id="second-player-iden",
+            player_token="b" * 64,
+        )
+
+        errors = [
+            event for event in client.get_received() if event["name"] == "action_error"
+        ]
+        assert errors[0]["args"][0]["message"] == (
+            "This browser is already in another player seat."
+        )
+        assert list(first_game.players) == [PLAYER_ID]
+        assert second_game.players == {}
+    finally:
+        if client.is_connected():
+            client.disconnect()
+        registry.remove(first_game.room_code)
+        registry.remove(second_game.room_code)

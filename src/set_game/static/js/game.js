@@ -21,7 +21,14 @@
 function generateSecureId() {
   if (window.crypto && typeof window.crypto.randomUUID === "function")
     return window.crypto.randomUUID();
-  return null;
+  if (!(window.crypto && typeof window.crypto.getRandomValues === "function"))
+    return null;
+  const bytes = new Uint8Array(16);
+  window.crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0"));
+  return `${hex.slice(0, 4).join("")}-${hex.slice(4, 6).join("")}-${hex.slice(6, 8).join("")}-${hex.slice(8, 10).join("")}-${hex.slice(10).join("")}`;
 }
 function generateSecureToken() {
   if (!(window.crypto && typeof window.crypto.getRandomValues === "function"))
@@ -41,13 +48,44 @@ document.addEventListener("DOMContentLoaded", () => {
   const PID_KEY = `set_player_id_${roomCode}`;
   const TOKEN_KEY = `set_player_token_${roomCode}`;
 
-  const myName = sessionStorage.getItem(NICK_KEY);
+  function sessionGet(key) {
+    try {
+      return sessionStorage.getItem(key);
+    } catch (_error) {
+      return null;
+    }
+  }
+  function sessionSet(key, value) {
+    try {
+      sessionStorage.setItem(key, value);
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }
+  function sessionRemove(key) {
+    try {
+      sessionStorage.removeItem(key);
+    } catch (_error) {
+      // The terminal error remains usable even if storage cannot be changed.
+    }
+  }
+
+  const myName = sessionGet(NICK_KEY);
   if (!myName) {
-    window.location.href = "/";
+    window.location.href = `/?room=${encodeURIComponent(roomCode)}`;
     return;
   }
-  let myPlayerId = sessionStorage.getItem(PID_KEY);
-  let myPlayerToken = sessionStorage.getItem(TOKEN_KEY);
+  let myPlayerId = sessionGet(PID_KEY);
+  let myPlayerToken = sessionGet(TOKEN_KEY);
+  const validPlayerId = /^[A-Za-z0-9_-]{16,128}$/.test(myPlayerId || "");
+  const validPlayerToken = /^[A-Za-z0-9_-]{32,128}$/.test(
+    myPlayerToken || "",
+  );
+  if (!validPlayerId || !validPlayerToken) {
+    myPlayerId = null;
+    myPlayerToken = null;
+  }
   if (!myPlayerId || !myPlayerToken) {
     myPlayerId = generateSecureId();
     myPlayerToken = generateSecureToken();
@@ -60,8 +98,15 @@ document.addEventListener("DOMContentLoaded", () => {
       );
       return;
     }
-    sessionStorage.setItem(PID_KEY, myPlayerId);
-    sessionStorage.setItem(TOKEN_KEY, myPlayerToken);
+    if (!sessionSet(PID_KEY, myPlayerId) || !sessionSet(TOKEN_KEY, myPlayerToken)) {
+      root.replaceChildren(
+        Object.assign(document.createElement("p"), {
+          textContent:
+            "Private browsing storage is unavailable. Enable session storage to join this game.",
+        }),
+      );
+      return;
+    }
   }
 
   // --- view elements --------------------------------------------------
@@ -72,9 +117,16 @@ document.addEventListener("DOMContentLoaded", () => {
     game: document.getElementById("game-view"),
     gameover: document.getElementById("gameover-view"),
   };
-  function showView(name) {
+  let visibleView = "connecting";
+  function showView(name, focus = true) {
+    const changed = visibleView !== name;
     Object.entries(views).forEach(([key, el]) => (el.hidden = key !== name));
     deckStatusEl.hidden = name !== "game";
+    visibleView = name;
+    if (changed && focus) {
+      const heading = views[name].querySelector("h1, h2, [role='heading']");
+      requestAnimationFrame(() => heading?.focus());
+    }
   }
 
   const boardEl = document.getElementById("board");
@@ -95,6 +147,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const revealFeaturesEl = document.getElementById("reveal-features");
   const revealCountdownEl = document.getElementById("reveal-countdown");
   const toastEl = document.getElementById("toast");
+  const gameStatusEl = document.getElementById("game-status");
   const connectionEl = document.getElementById("room-connection");
 
   const RING_CIRCUMFERENCE = 283; // 2 * pi * r45, matches the SVG circle
@@ -105,6 +158,10 @@ document.addEventListener("DOMContentLoaded", () => {
   let hasJoined = false;
   let connectionReady = false;
   let removedFromRoom = false;
+  let joinPending = false;
+  let rejectedSelectionPending = false;
+  let selectionAnimationGeneration = 0;
+  let rovingCardCode = null;
   let latestSnapshot = null; // last full room_state we rendered
   let selectedCodes = new Set(); // cards currently highlighted as selected
   let lastScores = {}; // player_id -> last-rendered score, to detect bumps
@@ -125,8 +182,31 @@ document.addEventListener("DOMContentLoaded", () => {
   let noSetVoters = new Set();
   let noSetNeeded = 0;
 
+  function announce(message, focus = false) {
+    gameStatusEl.textContent = "";
+    requestAnimationFrame(() => {
+      gameStatusEl.textContent = message;
+      if (focus) gameStatusEl.focus();
+    });
+  }
+
+  function finishOnce(element, eventName, callback, timeoutMs) {
+    let finished = false;
+    const finish = () => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timer);
+      element.removeEventListener(eventName, finish);
+      callback();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    element.addEventListener(eventName, finish, { once: true });
+    return finish;
+  }
+
   function toast(message, type) {
     clearTimeout(toastEl._hideTimer);
+    clearTimeout(toastEl._fallbackTimer);
     if (toastEl._animationHandler) {
       toastEl.removeEventListener("animationend", toastEl._animationHandler);
       toastEl._animationHandler = null;
@@ -137,13 +217,15 @@ document.addEventListener("DOMContentLoaded", () => {
     toastEl.hidden = false;
     toastEl._hideTimer = setTimeout(() => {
       toastEl.classList.add("toast-leaving");
-      toastEl._animationHandler = () => {
+      const hide = () => {
+        clearTimeout(toastEl._fallbackTimer);
+        toastEl.removeEventListener("animationend", hide);
         toastEl.hidden = true;
         toastEl._animationHandler = null;
       };
-      toastEl.addEventListener("animationend", toastEl._animationHandler, {
-        once: true,
-      });
+      toastEl._animationHandler = hide;
+      toastEl.addEventListener("animationend", hide, { once: true });
+      toastEl._fallbackTimer = setTimeout(hide, 450);
     }, 3200);
   }
 
@@ -158,6 +240,37 @@ document.addEventListener("DOMContentLoaded", () => {
     connectionEl.classList.toggle("is-offline", state === "offline");
   }
 
+  function showTerminalConnection(message) {
+    connectionReady = false;
+    views.connecting.replaceChildren();
+    const title = document.createElement("h1");
+    title.id = "terminal-connection-title";
+    title.className = "status-title";
+    title.tabIndex = -1;
+    title.textContent = "Unable to join";
+    const detail = document.createElement("p");
+    detail.textContent = message;
+    const backLink = document.createElement("a");
+    backLink.href = "/";
+    backLink.textContent = "Back to game home";
+    views.connecting.append(title, detail);
+    if (/credentials|seat belongs/i.test(message)) {
+      const newSeat = document.createElement("button");
+      newSeat.type = "button";
+      newSeat.className = "btn btn-primary";
+      newSeat.textContent = "Join with a new seat";
+      newSeat.addEventListener("click", () => {
+        sessionRemove(PID_KEY);
+        sessionRemove(TOKEN_KEY);
+        window.location.reload();
+      });
+      views.connecting.appendChild(newSeat);
+    }
+    views.connecting.appendChild(backLink);
+    showView("connecting");
+    requestAnimationFrame(() => title.focus());
+  }
+
   socket.on("connect", () => {
     if (removedFromRoom) return;
     showConnection("Syncing", "");
@@ -165,6 +278,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // Socket.IO may have reconnected after the board changed while this
     // tab was offline.
     connectionReady = false;
+    joinPending = true;
     socket.emit("join_room", {
       room_code: roomCode,
       name: myName,
@@ -173,10 +287,18 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  socket.on("disconnect", () => {
+  socket.on("disconnect", (reason) => {
     connectionReady = false;
+    joinPending = false;
+    if (reason === "io server disconnect" && !removedFromRoom) {
+      showTerminalConnection(
+        "This player seat was opened in another tab. Reload to take the seat back.",
+      );
+      return;
+    }
     showConnection("Reconnecting", "offline");
     updateControlsEnabled();
+    updateConnectionControls();
     if (hasJoined)
       toast("Connection lost. We’re trying to reconnect…", "error");
   });
@@ -186,25 +308,22 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   socket.on("action_error", (data) => {
-    if (!hasJoined) {
-      views.connecting.replaceChildren();
-      const message = document.createElement("p");
-      message.textContent = data.message;
-      const navigation = document.createElement("p");
-      const backLink = document.createElement("a");
-      backLink.href = "/";
-      backLink.textContent = "Back to home";
-      navigation.appendChild(backLink);
-      views.connecting.append(message, navigation);
-      showView("connecting");
+    if (!hasJoined || joinPending) {
+      joinPending = false;
+      showTerminalConnection(data.message);
       return;
     }
     toast(data.message, "error");
+    announce(data.message);
   });
 
   socket.on("room_state", (snapshot) => renderSnapshot(snapshot));
   socket.on("players_updated", (data) => {
     if (!latestSnapshot) return;
+    const previousPlayers = new Map(
+      latestSnapshot.players.map((player) => [player.player_id, player]),
+    );
+    if (data.title) latestSnapshot.title = data.title;
     latestSnapshot.players = data.players || latestSnapshot.players;
     if (data.winner_ids) latestSnapshot.winner_ids = data.winner_ids;
     if (data.no_set_vote) {
@@ -215,6 +334,18 @@ document.addEventListener("DOMContentLoaded", () => {
     else if (latestSnapshot.phase === "playing")
       renderPlayers(latestSnapshot.players, latestSnapshot.buzz);
     else renderGameOver(latestSnapshot);
+    const joined = (data.players || []).find(
+      (player) => !previousPlayers.has(player.player_id),
+    );
+    const connectionChanged = (data.players || []).find((player) => {
+      const previous = previousPlayers.get(player.player_id);
+      return previous && previous.connected !== player.connected;
+    });
+    if (joined) announce(`${joined.name} joined the game.`);
+    else if (connectionChanged)
+      announce(
+        `${connectionChanged.name} ${connectionChanged.connected ? "reconnected" : "disconnected"}.`,
+      );
   });
   socket.on("removed_from_room", (data) => {
     removedFromRoom = true;
@@ -228,17 +359,21 @@ document.addEventListener("DOMContentLoaded", () => {
     backLink.textContent = "Private game home";
     views.connecting.append(message, backLink);
     showView("connecting");
+    announce(data.message || "You were removed by the host.");
   });
   socket.on("game_started", (snapshot) => {
-    SetAudio.deal();
     renderSnapshot(snapshot);
+    announce("The match has started. Cards are ready.");
+    SetAudio.deal();
   });
   socket.on("game_over", (snapshot) => {
-    SetAudio.gameOver();
     renderSnapshot(snapshot);
+    announce(document.getElementById("winner-line").textContent);
+    SetAudio.gameOver();
   });
 
   socket.on("buzz_started", (data) => {
+    clearSelectionState();
     selectedCodes.clear();
     // buzz_started/buzz_ended are granular events (not full room_state
     // snapshots), so latestSnapshot.buzz must be kept in sync here too --
@@ -252,10 +387,17 @@ document.addEventListener("DOMContentLoaded", () => {
       };
     }
     startBuzzUI(data);
+    announce(
+      data.player_id === myPlayerId
+        ? "You called SET. Choose three cards. You have 10 seconds."
+        : `${data.name} called SET and is choosing cards.`,
+    );
+    if (data.player_id === myPlayerId) focusFirstCard();
     SetAudio.buzzIn();
   });
   socket.on("buzz_ended", () => {
     if (latestSnapshot) latestSnapshot.buzz = null;
+    if (!rejectedSelectionPending) clearSelectionState();
     stopBuzzUI();
   });
 
@@ -265,32 +407,60 @@ document.addEventListener("DOMContentLoaded", () => {
     card.setAttribute("aria-pressed", String(selected));
   }
 
+  function clearSelectionState() {
+    selectionAnimationGeneration++;
+    rejectedSelectionPending = false;
+    selectedCodes.clear();
+    boardEl.querySelectorAll(".card.selected, .card.card-invalid").forEach((card) => {
+      card.classList.remove("selected", "card-invalid");
+      card.style.animationDelay = "";
+      markCardSelected(card, false);
+    });
+  }
+
   socket.on("card_selected", (data) => {
     const card = boardEl.querySelector(`.card[data-code="${data.card}"]`);
     if (data.selected) selectedCodes.add(data.card);
     else selectedCodes.delete(data.card);
+    if (latestSnapshot?.buzz) {
+      latestSnapshot.buzz.selection = [...selectedCodes];
+    }
     markCardSelected(card, data.selected);
     updateControlsEnabled();
     if (data.player_id === myPlayerId) SetAudio.click();
   });
 
   socket.on("set_claimed", (data) => {
-    SetAudio.validSet();
     updateScoreboardFromPlayers(data.players);
     deckCountEl.textContent = data.deck_remaining;
     selectedCodes.clear();
+    noSetVoters.clear();
+    noSetNeeded = 0;
+    if (latestSnapshot) {
+      latestSnapshot.board = data.board;
+      latestSnapshot.deck_remaining = data.deck_remaining;
+      latestSnapshot.no_set_vote = { voters: [], needed: 0 };
+    }
 
     revealEndsAt = performance.now() + data.reveal_ms;
     showReveal(data.removed, nameFor(data.player_id));
     ensureTicking();
     animateSetClaim(data.removed, data.board, data.added);
+    announce(`${nameFor(data.player_id)} found a valid set and earned one point.`);
+    SetAudio.validSet();
   });
 
   socket.on("set_rejected", (data) => {
-    SetAudio.invalidSet();
     updateScoreboardFromPlayers(data.players);
+    rejectedSelectionPending = true;
     shakeSelected();
-    selectedCodes.clear();
+    const mine = data.player_id === myPlayerId;
+    announce(
+      mine
+        ? `Your set was ${data.reason === "timeout" ? "not completed in time" : "invalid"}. One point lost; locked out for 5 seconds.`
+        : `${nameFor(data.player_id)}'s set was ${data.reason === "timeout" ? "not completed in time" : "invalid"}.`,
+    );
+    SetAudio.invalidSet();
   });
 
   socket.on("no_set_vote", (data) => {
@@ -299,29 +469,41 @@ document.addEventListener("DOMContentLoaded", () => {
     if (latestSnapshot)
       renderPlayers(latestSnapshot.players, latestSnapshot.buzz);
     updateControlsEnabled();
+    if (data.player_id)
+      announce(
+        `${nameFor(data.player_id)} ${data.voted ? "voted no set" : "removed their no-set vote"}. ${data.voters.length} of ${data.needed} votes.`,
+      );
     if (data.player_id === myPlayerId) SetAudio.click();
   });
 
   socket.on("cooldown_ended", (data) => {
     delete lockoutEndsAtByPlayer[data.player_id];
     updateScoreboardFromPlayers(data.players);
+    if (data.player_id === myPlayerId) announce("Your lockout ended. You can buzz again.");
   });
 
   socket.on("reveal_ended", (data) => {
     revealEndsAt = 0;
     hideReveal();
     updateScoreboardFromPlayers(data.players);
+    announce("Cards are available again.");
   });
 
   socket.on("cards_dealt", (data) => {
-    SetAudio.deal();
     // The server already emits an empty no_set_vote before this; clearing
     // here too is belt-and-braces against out-of-order delivery.
     noSetVoters = new Set();
     noSetNeeded = 0;
     updateScoreboardFromPlayers(data.players);
     deckCountEl.textContent = data.deck_remaining;
+    if (latestSnapshot) {
+      latestSnapshot.board = data.board;
+      latestSnapshot.deck_remaining = data.deck_remaining;
+      latestSnapshot.no_set_vote = { voters: [], needed: 0 };
+    }
     syncBoard(data.board, data.added);
+    announce(`${data.added.length} cards added. ${data.board.length} cards are in play.`);
+    SetAudio.deal();
   });
 
   // A backgrounded tab only hears about changes via socket pushes; if it
@@ -331,6 +513,11 @@ document.addEventListener("DOMContentLoaded", () => {
   // on socket.io's own reconnect timing.
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState === "visible" && hasJoined) {
+      joinPending = true;
+      connectionReady = false;
+      showConnection("Syncing", "");
+      updateControlsEnabled();
+      updateConnectionControls();
       socket.emit("join_room", {
         room_code: roomCode,
         name: myName,
@@ -354,9 +541,13 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderSnapshot(snapshot) {
+    const previousPhase = latestSnapshot?.phase;
+    joinPending = false;
     connectionReady = true;
     showConnection("Connected", "live");
     latestSnapshot = snapshot;
+    document.getElementById("game-title").textContent = snapshot.title;
+    if (previousPhase && previousPhase !== snapshot.phase) lastScores = {};
     const now = performance.now();
     syncLockoutDeadlines(snapshot.players, now);
     // Mid-reveal reconnect: we don't have the claimed cards to replay the
@@ -364,6 +555,8 @@ document.addEventListener("DOMContentLoaded", () => {
     // client can't buzz early -- reveal_remaining_ms carries the residual.
     revealEndsAt =
       snapshot.reveal_remaining_ms > 0 ? now + snapshot.reveal_remaining_ms : 0;
+    if (!revealEndsAt) hideReveal();
+    else if (revealOverlay.hidden) showReveal([], "A player");
     // Restore a pending no-set vote on (re)connect rather than resetting
     // to 0 -- the tally is room state, not something this client owns.
     noSetVoters = new Set(
@@ -397,6 +590,7 @@ document.addEventListener("DOMContentLoaded", () => {
         stopBuzzUI();
       }
       updateControlsEnabled(now);
+      updateConnectionControls();
       if (revealEndsAt || anyTimersActive(now)) ensureTicking();
       showView("game");
     } else if (snapshot.phase === "finished") {
@@ -415,21 +609,29 @@ document.addEventListener("DOMContentLoaded", () => {
   function renderWaitingView(snapshot) {
     document.getElementById("waiting-title").textContent = snapshot.title;
     const list = document.getElementById("waiting-player-list");
-    list.innerHTML = "";
+    const focusedPlayerId = document.activeElement?.classList?.contains("kick-player")
+      ? document.activeElement.dataset.playerId
+      : null;
+    list.replaceChildren();
     snapshot.players.forEach((p) => {
       const li = document.createElement("li");
-      const tags = [];
-      if (p.is_host) tags.push('<span class="tag">HOST</span>');
-      if (p.player_id === myPlayerId) tags.push('<span class="tag">YOU</span>');
-      if (!p.connected)
-        tags.push('<span class="tag tag-offline">OFFLINE</span>');
-      const remove =
-        isHost() && p.player_id !== myPlayerId
-          ? `<button class="kick-player link-btn" type="button" data-player-id="${p.player_id}" data-player-name="${escapeHtml(p.name)}">Remove</button>`
-          : "";
-      li.innerHTML = `<span class="row-title">${escapeHtml(p.name)}</span><span>${tags.join("")}${remove}</span>`;
+      const title = document.createElement("span");
+      title.className = "row-title";
+      title.textContent = p.name;
+      const actions = document.createElement("span");
+      if (p.is_host) actions.appendChild(buildTag("HOST"));
+      if (p.player_id === myPlayerId) actions.appendChild(buildTag("YOU"));
+      if (!p.connected) actions.appendChild(buildTag("OFFLINE", "tag-offline"));
+      const remove = buildRemoveButton(p, "link-btn");
+      if (remove) actions.appendChild(remove);
+      li.append(title, actions);
       list.appendChild(li);
     });
+    if (focusedPlayerId) {
+      list
+        .querySelector(`.kick-player[data-player-id="${focusedPlayerId}"]`)
+        ?.focus();
+    }
     document.getElementById("player-count").textContent =
       `${snapshot.players.length} of 8`;
 
@@ -443,7 +645,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (isHost()) {
       startBtn.hidden = false;
-      startBtn.disabled = activeCount < 2;
+      startBtn.disabled = !connectionReady || activeCount < 2;
       hint.textContent =
         activeCount < 2 ? "Need at least 2 players to start." : "";
     } else {
@@ -453,39 +655,60 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function renderPlayers(players, buzz) {
-    playersEl.innerHTML = "";
+    const focusedPlayerId = document.activeElement?.classList?.contains("kick-player")
+      ? document.activeElement.dataset.playerId
+      : null;
+    playersEl.replaceChildren();
     players.forEach((p) => {
       const tile = document.createElement("div");
       tile.className = "player-tile";
+      tile.setAttribute("role", "listitem");
       tile.dataset.playerId = p.player_id;
       if (p.spectator) tile.classList.add("spectator");
       if (buzz && buzz.player_id === p.player_id)
         tile.classList.add("active-buzzer");
       if (noSetVoters.has(p.player_id)) tile.classList.add("voted-no-set");
-      const youTag = p.player_id === myPlayerId ? " (you)" : "";
-      const voteTag = noSetVoters.has(p.player_id)
-        ? '<span class="tag tag-vote">NO SET</span>'
-        : "";
-      const remove =
-        isHost() && p.player_id !== myPlayerId
-          ? `<button class="kick-player icon-text-btn" type="button" data-player-id="${p.player_id}" data-player-name="${escapeHtml(p.name)}" aria-label="Remove ${escapeHtml(p.name)}">Remove</button>`
-          : "";
-      tile.innerHTML = `<span class="name">${escapeHtml(p.name)}${youTag}${p.spectator ? " · watching" : ""}${voteTag}</span><span class="score">${p.score}</span><span class="cooldown"></span>${remove}`;
+      const name = document.createElement("span");
+      name.className = "name";
+      name.textContent = `${p.name}${p.player_id === myPlayerId ? " (you)" : ""}${p.spectator ? " · watching" : ""}`;
+      if (noSetVoters.has(p.player_id))
+        name.appendChild(buildTag("NO SET", "tag-vote"));
+      const score = document.createElement("span");
+      score.className = "score";
+      score.textContent = p.score;
+      const cooldown = document.createElement("span");
+      cooldown.className = "cooldown";
+      tile.append(name, score, cooldown);
+      const remove = buildRemoveButton(p, "icon-text-btn");
+      if (remove) tile.appendChild(remove);
       if (
         !REDUCED_MOTION &&
         lastScores[p.player_id] !== undefined &&
         lastScores[p.player_id] !== p.score
       ) {
         tile.classList.add("score-bump");
-        tile.addEventListener(
+        finishOnce(
+          tile,
           "animationend",
           () => tile.classList.remove("score-bump"),
-          { once: true },
+          650,
         );
       }
       lastScores[p.player_id] = p.score;
+      const states = [];
+      if (p.spectator) states.push("watching");
+      if (buzz?.player_id === p.player_id) states.push("choosing cards");
+      if (noSetVoters.has(p.player_id)) states.push("voted no set");
+      const baseLabel = `${p.name}, ${p.score} point${p.score === 1 ? "" : "s"}${states.length ? `, ${states.join(", ")}` : ""}`;
+      tile.dataset.baseLabel = baseLabel;
+      tile.setAttribute("aria-label", baseLabel);
       playersEl.appendChild(tile);
     });
+    if (focusedPlayerId) {
+      playersEl
+        .querySelector(`.kick-player[data-player-id="${focusedPlayerId}"]`)
+        ?.focus();
+    }
     updateLockoutTiles(performance.now());
   }
 
@@ -514,18 +737,25 @@ document.addEventListener("DOMContentLoaded", () => {
 
     const sorted = [...snapshot.players].sort((a, b) => b.score - a.score);
     const list = document.getElementById("standings-list");
-    list.innerHTML = "";
+    list.replaceChildren();
     sorted.forEach((p) => {
       const li = document.createElement("li");
       if (snapshot.winner_ids.includes(p.player_id))
         li.classList.add("is-winner");
-      li.innerHTML = `<span class="row-title">${escapeHtml(p.name)}</span><span class="row-meta">${p.score} ${snapshot.winner_ids.includes(p.player_id) ? "· WINNER" : ""}</span>`;
+      const title = document.createElement("span");
+      title.className = "row-title";
+      title.textContent = p.name;
+      const meta = document.createElement("span");
+      meta.className = "row-meta";
+      meta.textContent = `${p.score} ${snapshot.winner_ids.includes(p.player_id) ? "· WINNER" : ""}`;
+      li.append(title, meta);
       list.appendChild(li);
     });
 
     const playAgainBtn = document.getElementById("play-again-btn");
     const playAgainHint = document.getElementById("play-again-hint");
     playAgainBtn.hidden = !isHost();
+    playAgainBtn.disabled = !connectionReady;
     playAgainHint.hidden = isHost();
   }
 
@@ -534,10 +764,24 @@ document.addEventListener("DOMContentLoaded", () => {
     return p ? p.name : "Someone";
   }
 
-  function escapeHtml(s) {
-    const div = document.createElement("div");
-    div.textContent = s;
-    return div.innerHTML;
+  function buildTag(text, extraClass) {
+    const tag = document.createElement("span");
+    tag.className = `tag${extraClass ? ` ${extraClass}` : ""}`;
+    tag.textContent = text;
+    return tag;
+  }
+
+  function buildRemoveButton(player, extraClass) {
+    if (!isHost() || player.player_id === myPlayerId) return null;
+    const button = document.createElement("button");
+    button.className = `kick-player ${extraClass}`;
+    button.type = "button";
+    button.dataset.playerId = player.player_id;
+    button.dataset.playerName = player.name;
+    button.ariaLabel = `Remove ${player.name}`;
+    button.textContent = "Remove";
+    button.disabled = !connectionReady;
+    return button;
   }
 
   // --- unified countdowns: buzz ring, per-player lockouts, reveal freeze --
@@ -553,6 +797,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function controlsState(now) {
+    const playing = latestSnapshot?.phase === "playing";
     const spectator = isSpectator();
     const revealMsLeft = revealEndsAt ? Math.max(0, revealEndsAt - now) : 0;
     const revealing = revealMsLeft > 0;
@@ -592,8 +837,9 @@ document.addEventListener("DOMContentLoaded", () => {
         : "";
     return {
       disabled:
-        !connectionReady || spectator || revealing || buzzActive || lockedOut,
-      voteDisabled: !connectionReady || spectator || revealing || buzzActive,
+        !playing || !connectionReady || spectator || revealing || buzzActive || lockedOut,
+      voteDisabled:
+        !playing || !connectionReady || spectator || revealing || buzzActive,
       voteStatus,
       iVoted,
       label,
@@ -611,21 +857,52 @@ document.addEventListener("DOMContentLoaded", () => {
     noSetBtn.disabled = state.voteDisabled;
     buzzBtn.classList.toggle("cooldown", state.lockedOut && !state.revealing);
     noSetBtn.classList.toggle("voted", state.iVoted);
+    noSetBtn.setAttribute("aria-pressed", String(state.iVoted));
     buzzLabelEl.textContent = state.label;
     noSetVoteStatusEl.textContent = state.voteStatus;
     updateBoardInteractivity();
   }
 
-  function updateBoardInteractivity() {
-    const canSelect = !!(
-      latestSnapshot?.buzz &&
-      latestSnapshot.buzz.player_id === myPlayerId &&
+  function updateConnectionControls() {
+    root
+      .querySelectorAll("#start-game-btn, #play-again-btn, .kick-player")
+      .forEach((button) => {
+        if (!connectionReady) button.disabled = true;
+      });
+  }
+
+  function canSelectCard() {
+    return !!(
+      connectionReady &&
+      latestSnapshot?.phase === "playing" &&
+      latestSnapshot.buzz?.player_id === myPlayerId &&
       buzzDeadline > performance.now() &&
       selectedCodes.size < 3
     );
-    boardEl.querySelectorAll(".card").forEach((card) => {
+  }
+
+  function focusFirstCard() {
+    if (!canSelectCard()) return;
+    const first = boardEl.querySelector(".card:not(.card-vanish)");
+    if (!first) return;
+    rovingCardCode = Number(first.dataset.code);
+    updateBoardInteractivity();
+    first.focus();
+  }
+
+  function updateBoardInteractivity() {
+    const canSelect = canSelectCard();
+    const cards = [...boardEl.querySelectorAll(".card")];
+    if (
+      canSelect &&
+      !cards.some((card) => Number(card.dataset.code) === rovingCardCode)
+    ) {
+      rovingCardCode = cards.length ? Number(cards[0].dataset.code) : null;
+    }
+    cards.forEach((card) => {
       card.classList.toggle("not-interactive", !canSelect);
-      card.tabIndex = canSelect ? 0 : -1;
+      card.tabIndex =
+        canSelect && Number(card.dataset.code) === rovingCardCode ? 0 : -1;
       card.setAttribute("aria-disabled", String(!canSelect));
     });
   }
@@ -638,12 +915,17 @@ document.addEventListener("DOMContentLoaded", () => {
         const deadline = lockoutEndsAtByPlayer[pid];
         const cooldownEl = tile.querySelector(".cooldown");
         if (deadline && deadline > now) {
+          const seconds = Math.ceil((deadline - now) / 1000);
           tile.classList.add("locked-out");
-          if (cooldownEl)
-            cooldownEl.textContent = `${Math.ceil((deadline - now) / 1000)}s`;
+          if (cooldownEl) cooldownEl.textContent = `${seconds}s`;
+          tile.setAttribute(
+            "aria-label",
+            `${tile.dataset.baseLabel}, locked out for ${seconds} seconds`,
+          );
         } else {
           tile.classList.remove("locked-out");
           if (cooldownEl) cooldownEl.textContent = "";
+          tile.setAttribute("aria-label", tile.dataset.baseLabel || "Player");
         }
       });
   }
@@ -679,7 +961,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function anyTimersActive(now) {
-    if (latestSnapshot && latestSnapshot.buzz) return true;
+    if (latestSnapshot?.buzz && buzzDeadline > now) return true;
     if (revealEndsAt && revealEndsAt > now) return true;
     return Object.values(lockoutEndsAtByPlayer).some((t) => t > now);
   }
@@ -722,6 +1004,10 @@ document.addEventListener("DOMContentLoaded", () => {
     boardEl.classList.toggle("board-large", cards.length > 12);
     boardEl.classList.toggle("board-xlarge", cards.length > 15);
     boardEl.classList.toggle("board-xxlarge", cards.length > 18);
+    boardEl.style.setProperty(
+      "--board-rows",
+      String(cards.length > 18 ? Math.ceil(cards.length / 6) : 3),
+    );
     const enterSet = new Set(enterCodes || []);
     const existing = new Map();
     boardEl
@@ -751,13 +1037,14 @@ document.addEventListener("DOMContentLoaded", () => {
           // The animation fills forward (holds its end transform) until
           // this class is removed -- left in place, it would permanently
           // pin transform to identity and block .selected's own lift.
-          el.addEventListener(
+          finishOnce(
+            el,
             "animationend",
             () => {
               el.classList.remove("card-enter");
               el.style.animationDelay = "";
             },
-            { once: true },
+            700 + cards.length * 35,
           );
         }
       }
@@ -794,17 +1081,29 @@ document.addEventListener("DOMContentLoaded", () => {
         const dx = first.left - last.left;
         const dy = first.top - last.top;
         if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+        if (el._finishFlip) el._finishFlip();
         el.style.setProperty("--flip-x", `${dx}px`);
         el.style.setProperty("--flip-y", `${dy}px`);
         el.classList.add("card-flip", "card-flip-start");
         requestAnimationFrame(() => {
           requestAnimationFrame(() => el.classList.remove("card-flip-start"));
         });
-        el.addEventListener(
-          "transitionend",
-          () => el.classList.remove("card-flip"),
-          { once: true },
-        );
+        let flipFinished = false;
+        const finishFlip = () => {
+          if (flipFinished) return;
+          flipFinished = true;
+          clearTimeout(flipFallback);
+          el.removeEventListener("transitionend", onFlipEnd);
+          el.classList.remove("card-flip", "card-flip-start");
+          if (el._finishFlip === finishFlip) el._finishFlip = null;
+        };
+        const onFlipEnd = (event) => {
+          if (event.target === el && event.propertyName === "transform")
+            finishFlip();
+        };
+        const flipFallback = setTimeout(finishFlip, 550);
+        el._finishFlip = finishFlip;
+        el.addEventListener("transitionend", onFlipEnd);
       });
     }
     updateBoardInteractivity();
@@ -816,39 +1115,62 @@ document.addEventListener("DOMContentLoaded", () => {
   function animateSetClaim(removedCards, newBoard, addedCards) {
     const addedCodes = addedCards.map((c) => c.code);
     let pending = 0;
+    let focusWasRemoved = false;
+    const finishCard = () => {
+      pending--;
+      if (pending !== 0) return;
+      syncBoard(newBoard, addedCodes);
+      if (focusWasRemoved) gameStatusEl.focus();
+    };
     removedCards.forEach((card, i) => {
       const el = boardEl.querySelector(`.card[data-code="${card.code}"]`);
       if (!el) return;
       pending++;
+      if (el === document.activeElement) focusWasRemoved = true;
       markCardSelected(el, false);
       el.style.animationDelay = REDUCED_MOTION ? "0ms" : `${i * 60}ms`;
       el.classList.add("card-vanish");
-      el.addEventListener(
+      finishOnce(
+        el,
         "animationend",
-        () => {
-          pending--;
-          if (pending === 0) syncBoard(newBoard, addedCodes);
-        },
-        { once: true },
+        finishCard,
+        650 + i * 60,
       );
     });
     if (pending === 0) syncBoard(newBoard, addedCodes);
   }
 
   function shakeSelected() {
-    selectedCodes.forEach((code) => {
+    const codes = [...selectedCodes];
+    const generation = ++selectionAnimationGeneration;
+    let pending = 0;
+    const finishInvalid = (el, code) => {
+      if (el._invalidGeneration === generation) {
+        el.classList.remove("card-invalid");
+        el.style.animationDelay = "";
+        markCardSelected(el, selectedCodes.has(code));
+      }
+      pending--;
+      if (pending === 0 && selectionAnimationGeneration === generation)
+        rejectedSelectionPending = false;
+    };
+    codes.forEach((code) => {
       const el = boardEl.querySelector(`.card[data-code="${code}"]`);
       if (!el) return;
+      pending++;
+      el._invalidGeneration = generation;
+      markCardSelected(el, false);
       el.classList.add("card-invalid");
-      el.addEventListener(
+      finishOnce(
+        el,
         "animationend",
-        () => {
-          el.classList.remove("card-invalid");
-          markCardSelected(el, false);
-        },
-        { once: true },
+        () => finishInvalid(el, code),
+        550,
       );
     });
+    selectedCodes.clear();
+    if (pending === 0 && selectionAnimationGeneration === generation)
+      rejectedSelectionPending = false;
   }
 
   /** Returns true if the card was actually actionable (i.e. it's your
@@ -857,11 +1179,41 @@ document.addEventListener("DOMContentLoaded", () => {
    * Space-to-buzz shortcut). */
   function trySelectCard(cardEl) {
     if (!cardEl || cardEl.classList.contains("card-vanish")) return false;
-    const amBuzzer =
-      latestSnapshot?.buzz && latestSnapshot.buzz.player_id === myPlayerId;
-    if (!amBuzzer) return false;
+    if (!canSelectCard() || cardEl.getAttribute("aria-disabled") === "true")
+      return false;
     socket.emit("select_card", { card: Number(cardEl.dataset.code) });
     return true;
+  }
+
+  function moveCardFocus(current, direction) {
+    const currentRect = current.getBoundingClientRect();
+    const originX = currentRect.left + currentRect.width / 2;
+    const originY = currentRect.top + currentRect.height / 2;
+    let best = null;
+    let bestScore = Infinity;
+    boardEl.querySelectorAll(".card:not(.card-vanish)").forEach((candidate) => {
+      if (candidate === current) return;
+      const rect = candidate.getBoundingClientRect();
+      const dx = rect.left + rect.width / 2 - originX;
+      const dy = rect.top + rect.height / 2 - originY;
+      const inDirection =
+        (direction === "left" && dx < -1) ||
+        (direction === "right" && dx > 1) ||
+        (direction === "up" && dy < -1) ||
+        (direction === "down" && dy > 1);
+      if (!inDirection) return;
+      const primary = direction === "left" || direction === "right" ? Math.abs(dx) : Math.abs(dy);
+      const secondary = direction === "left" || direction === "right" ? Math.abs(dy) : Math.abs(dx);
+      const score = primary + secondary * 2;
+      if (score < bestScore) {
+        best = candidate;
+        bestScore = score;
+      }
+    });
+    if (!best) return;
+    rovingCardCode = Number(best.dataset.code);
+    updateBoardInteractivity();
+    best.focus();
   }
 
   boardEl.addEventListener("click", (e) => {
@@ -874,6 +1226,20 @@ document.addEventListener("DOMContentLoaded", () => {
   // turn, this must NOT swallow the keypress: it should fall through to
   // the global Space-to-buzz shortcut below instead.
   boardEl.addEventListener("keydown", (e) => {
+    const directions = {
+      ArrowLeft: "left",
+      ArrowRight: "right",
+      ArrowUp: "up",
+      ArrowDown: "down",
+    };
+    if (directions[e.key]) {
+      const card = e.target.closest(".card");
+      if (card && canSelectCard()) {
+        e.preventDefault();
+        moveCardFocus(card, directions[e.key]);
+      }
+      return;
+    }
     if (e.key !== "Enter" && e.key !== " " && e.code !== "Space") return;
     const card = e.target.closest(".card");
     if (!card) return;
@@ -881,6 +1247,10 @@ document.addEventListener("DOMContentLoaded", () => {
       e.preventDefault();
       e.stopPropagation();
     }
+  });
+  boardEl.addEventListener("focusin", (e) => {
+    const card = e.target.closest(".card");
+    if (card) rovingCardCode = Number(card.dataset.code);
   });
 
   // --- set reveal: shared celebration + freeze ----------------------------
@@ -898,23 +1268,26 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function showReveal(cards, finderName) {
-    revealCreditEl.textContent = `${finderName} found a set!`;
+    revealCreditEl.textContent =
+      cards.length > 0 ? `${finderName} found a set!` : "A set was found!";
 
-    revealCardsEl.innerHTML = "";
+    revealCardsEl.replaceChildren();
     cards.forEach((c) => {
       const el = buildCardElement(c);
       el.tabIndex = -1;
-      el.removeAttribute("role");
+      el.setAttribute("role", "img");
       el.removeAttribute("aria-pressed");
       revealCardsEl.appendChild(el);
     });
 
-    revealFeaturesEl.innerHTML = "";
-    describeFeatures(cards).forEach((f, i) => {
+    revealFeaturesEl.replaceChildren();
+    (cards.length === 3 ? describeFeatures(cards) : []).forEach((f, i) => {
       const span = document.createElement("span");
       span.className = `reveal-feature ${f.allSame ? "all-same" : "all-diff"}`;
       span.style.animationDelay = REDUCED_MOTION ? "0ms" : `${0.3 + i * 0.12}s`;
-      span.innerHTML = `<strong>${f.label}</strong> ${f.allSame ? "all same" : "all different"}`;
+      const label = document.createElement("strong");
+      label.textContent = f.label;
+      span.append(label, ` ${f.allSame ? "all same" : "all different"}`);
       revealFeaturesEl.appendChild(span);
     });
 
@@ -952,8 +1325,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
   document.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    const tag = (e.target.tagName || "").toLowerCase();
-    if (tag === "input" || tag === "textarea") return;
+    if (latestSnapshot?.phase !== "playing") return;
+    if (e.target.closest("button, a, input, textarea, select, [contenteditable]"))
+      return;
     const modal = document.getElementById("how-to-play-modal");
     if (modal && !modal.hidden) return;
     // A focused card handles its own Enter/Space (see boardEl's keydown
@@ -972,7 +1346,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   root.addEventListener("click", (event) => {
     const button = event.target.closest(".kick-player");
-    if (!button || !isHost()) return;
+    if (!button || !isHost() || !connectionReady) return;
     const name = button.dataset.playerName || "this player";
     if (window.confirm(`Remove ${name} from this game?`)) {
       socket.emit("kick_player", { player_id: button.dataset.playerId });
@@ -991,6 +1365,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const copyLinkBtn = document.getElementById("copy-link-btn");
   const manualCopyEl = document.getElementById("manual-copy");
   const inviteLinkInput = document.getElementById("invite-link-input");
+  const inviteUrl = new URL(`/room/${roomCode}`, window.location.origin).href;
 
   async function copyText(text) {
     // Do this synchronously while the click's user activation is still
@@ -1030,17 +1405,21 @@ document.addEventListener("DOMContentLoaded", () => {
     return false;
   }
 
+  let copyInProgress = false;
   copyLinkBtn.addEventListener("click", async () => {
+    if (copyInProgress) return;
+    copyInProgress = true;
     const originalLabel = copyLinkBtn.textContent;
-    copyLinkBtn.disabled = true;
+    copyLinkBtn.setAttribute("aria-disabled", "true");
+    copyLinkBtn.setAttribute("aria-busy", "true");
     try {
-      const copied = await copyText(window.location.href);
+      const copied = await copyText(inviteUrl);
       if (!copied) throw new Error("copy failed");
       manualCopyEl.hidden = true;
       copyLinkBtn.textContent = "Copied!";
       toast("Invite link copied!", "success");
     } catch {
-      inviteLinkInput.value = window.location.href;
+      inviteLinkInput.value = inviteUrl;
       manualCopyEl.hidden = false;
       inviteLinkInput.focus();
       inviteLinkInput.select();
@@ -1049,7 +1428,9 @@ document.addEventListener("DOMContentLoaded", () => {
     } finally {
       setTimeout(() => {
         copyLinkBtn.textContent = originalLabel;
-        copyLinkBtn.disabled = false;
+        copyLinkBtn.removeAttribute("aria-disabled");
+        copyLinkBtn.removeAttribute("aria-busy");
+        copyInProgress = false;
       }, 1400);
     }
   });

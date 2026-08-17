@@ -134,6 +134,8 @@ class Game:
             p.sid = sid
             p.connected = True
             p.disconnected_at = None
+            if not any(player.is_host for player in self.players.values()):
+                p.is_host = True
             return p
         # Disconnected seats remain reserved during their reconnect grace
         # period, so a room can never exceed its advertised eight players.
@@ -192,7 +194,7 @@ class Game:
         p.sid = None
         p.disconnected_at = now
         self.no_set_votes.discard(player_id)
-        if p.is_host and self.phase == Phase.FINISHED:
+        if p.is_host:
             p.is_host = False
             self._reassign_host()
         if self.buzz and self.buzz.player_id == player_id:

@@ -29,6 +29,11 @@ def create_app() -> Flask:
     # Flask sessions are not used for player identity, but a random key still
     # prevents accidental reuse of the old public development secret.
     app.config["SECRET_KEY"] = secret_key or secrets.token_urlsafe(32)
+    trusted_hosts = os.environ.get("SET_TRUSTED_HOSTS")
+    if trusted_hosts:
+        app.config["TRUSTED_HOSTS"] = [
+            host.strip() for host in trusted_hosts.split(",") if host.strip()
+        ]
     # Only trust forwarded headers when deployed behind Render's proxy; doing
     # so for a directly exposed development server would trust client input.
     if production:
@@ -56,6 +61,10 @@ def create_app() -> Flask:
         )
         if request.endpoint in {"room", "healthz"}:
             response.headers.setdefault("X-Robots-Tag", "noindex, nofollow, noarchive")
+        if production and request.is_secure:
+            response.headers.setdefault(
+                "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+            )
         return response
 
     # Importing registers the Socket.IO event handlers on `socketio`.
