@@ -131,15 +131,13 @@ def test_shuffled_deck_is_deterministic_with_seeded_rng():
 
 def test_find_any_set_matches_brute_force_across_random_boards():
     rng = Random(1234)
-    for _ in range(200):
+    for _ in range(300):
         deck = shuffled_deck(rng)
-        board = deck[:12]
-        expected = any(is_set(a, b, c) for a, b, c in combinations(board, 3))
-        result = find_any_set(board)
-        assert (result is not None) == expected
-        if result is not None:
-            assert is_set(*result)
-            assert all(card in board for card in result)
+        board = deck[: rng.randint(3, 21)]
+        expected = next(
+            (triple for triple in combinations(board, 3) if is_set(*triple)), None
+        )
+        assert find_any_set(board) == expected
 
 
 def test_find_any_set_ignores_none_gaps():

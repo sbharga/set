@@ -2,8 +2,8 @@ services:
   - type: web
     name: set-private
     runtime: python
-    buildCommand: pip install uv && uv sync --frozen
-    startCommand: uv run gunicorn --worker-class gthread --workers 1 --threads 100 --bind 0.0.0.0:$PORT 'set_game.app:create_app()'
+    buildCommand: pip install uv && uv sync --frozen --no-dev
+    startCommand: uv run --frozen --no-dev gunicorn --worker-class gthread --workers 1 --threads 100 --bind 0.0.0.0:$PORT 'set_game.app:create_app()'
     healthCheckPath: /healthz
     envVars:
       - key: SET_ENV

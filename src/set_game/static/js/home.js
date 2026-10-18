@@ -100,7 +100,7 @@ document.addEventListener("DOMContentLoaded", () => {
       showGate(sessionGet(NICK_KEY)),
     );
 
-  const socket = io();
+  const socket = io({ transports: ["websocket", "polling"], tryAllTransports: true });
   let createTimeout = null;
   function setConnection(connected) {
     createRoomBtn.disabled = !connected;

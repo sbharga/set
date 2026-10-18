@@ -4,6 +4,18 @@
 {% set seo_social_url = url_for('index', _external=true) %}
 {% block body_class %}home-page{% endblock %}
 
+{% block head_extra %}
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      "name": "SET",
+      "alternateName": "SET Multiplayer",
+      "url": {{ url_for('index', _external=true)|tojson }}
+    }
+  </script>
+{% endblock %}
+
 {% block content %}
   <div class="home" itemscope itemtype="https://schema.org/VideoGame">
     <meta itemprop="name" content="SET Multiplayer" />

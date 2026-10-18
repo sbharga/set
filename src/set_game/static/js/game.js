@@ -231,6 +231,15 @@ document.addEventListener("DOMContentLoaded", () => {
     return finish;
   }
 
+  // The countdown loop calls the writers below every frame; only touch the
+  // DOM when a value actually changes.
+  function setTextIfChanged(el, text) {
+    if (el.textContent !== text) el.textContent = text;
+  }
+  function setAttributeIfChanged(el, name, value) {
+    if (el.getAttribute(name) !== value) el.setAttribute(name, value);
+  }
+
   function toast(message, type) {
     clearTimeout(toastEl._hideTimer);
     clearTimeout(toastEl._fallbackTimer);
@@ -258,7 +267,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // --- socket setup -----------------------------------------------------
 
-  const socket = io();
+  const socket = io({ transports: ["websocket", "polling"], tryAllTransports: true });
 
   function showTerminalConnection(message) {
     connectionReady = false;
@@ -927,13 +936,14 @@ document.addEventListener("DOMContentLoaded", () => {
   function updateControlsEnabled(now) {
     now = now || performance.now();
     const state = controlsState(now);
-    buzzBtn.disabled = state.disabled;
-    noSetBtn.disabled = state.voteDisabled;
+    if (buzzBtn.disabled !== state.disabled) buzzBtn.disabled = state.disabled;
+    if (noSetBtn.disabled !== state.voteDisabled)
+      noSetBtn.disabled = state.voteDisabled;
     buzzBtn.classList.toggle("cooldown", state.lockedOut && !state.revealing);
     noSetBtn.classList.toggle("voted", state.iVoted);
-    noSetBtn.setAttribute("aria-pressed", String(state.iVoted));
-    buzzLabelEl.textContent = state.label;
-    noSetVoteStatusEl.textContent = state.voteStatus;
+    setAttributeIfChanged(noSetBtn, "aria-pressed", String(state.iVoted));
+    setTextIfChanged(buzzLabelEl, state.label);
+    setTextIfChanged(noSetVoteStatusEl, state.voteStatus);
     updateBoardInteractivity();
   }
 
@@ -977,9 +987,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     cards.forEach((card) => {
       card.classList.toggle("not-interactive", !canSelect);
-      card.tabIndex =
-        canSelect && Number(card.dataset.code) === rovingCardCode ? 0 : -1;
-      card.setAttribute("aria-disabled", String(!canSelect));
+      setAttributeIfChanged(
+        card,
+        "tabindex",
+        String(
+          canSelect && Number(card.dataset.code) === rovingCardCode ? 0 : -1,
+        ),
+      );
+      setAttributeIfChanged(card, "aria-disabled", String(!canSelect));
     });
   }
 
@@ -990,18 +1005,23 @@ document.addEventListener("DOMContentLoaded", () => {
         const pid = tile.dataset.playerId;
         const deadline = lockoutEndsAtByPlayer[pid];
         const cooldownEl = tile.querySelector(".cooldown");
-        if (deadline && deadline > now) {
+        const locked = Boolean(deadline && deadline > now);
+        tile.classList.toggle("locked-out", locked);
+        if (locked) {
           const seconds = Math.ceil((deadline - now) / 1000);
-          tile.classList.add("locked-out");
-          if (cooldownEl) cooldownEl.textContent = `${seconds}s`;
-          tile.setAttribute(
+          if (cooldownEl) setTextIfChanged(cooldownEl, `${seconds}s`);
+          setAttributeIfChanged(
+            tile,
             "aria-label",
             `${tile.dataset.baseLabel}, locked out for ${seconds} seconds`,
           );
         } else {
-          tile.classList.remove("locked-out");
-          if (cooldownEl) cooldownEl.textContent = "";
-          tile.setAttribute("aria-label", tile.dataset.baseLabel || "Player");
+          if (cooldownEl) setTextIfChanged(cooldownEl, "");
+          setAttributeIfChanged(
+            tile,
+            "aria-label",
+            tile.dataset.baseLabel || "Player",
+          );
         }
       });
   }
@@ -1013,7 +1033,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const urgent = left <= 3000;
     buzzBarFillEl.classList.toggle("urgent", urgent);
     const wholeSecond = Math.ceil(left / 1000);
-    buzzCaptionSecondsEl.textContent = wholeSecond;
+    setTextIfChanged(buzzCaptionSecondsEl, String(wholeSecond));
     if (
       wholeSecond !== lastWholeSecond &&
       wholeSecond <= 3 &&
@@ -1026,12 +1046,14 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function updateRevealCountdownText(now) {
     if (!revealEndsAt) {
-      revealCountdownEl.textContent = "";
+      setTextIfChanged(revealCountdownEl, "");
       return;
     }
     const left = Math.max(0, revealEndsAt - now);
-    revealCountdownEl.textContent =
-      left > 0 ? `Back in ${Math.ceil(left / 1000)}s` : "";
+    setTextIfChanged(
+      revealCountdownEl,
+      left > 0 ? `Back in ${Math.ceil(left / 1000)}s` : "",
+    );
   }
 
   function anyTimersActive(now) {
@@ -1181,16 +1203,34 @@ document.addEventListener("DOMContentLoaded", () => {
         }
       }
       markCardSelected(el, selectedCodes.has(card.code));
-      if (cursor) cursor.after(el);
-      else boardEl.prepend(el);
+      // Re-inserting an element already in place detaches and reattaches
+      // it: wasted style work, and it blurs a focused card.
+      const inPlace = cursor
+        ? cursor.nextElementSibling === el
+        : boardEl.firstElementChild === el;
+      if (!inPlace) {
+        if (cursor) cursor.after(el);
+        else boardEl.prepend(el);
+      }
       cursor = el;
     });
 
     if (!REDUCED_MOTION) {
-      // Deal-in cards animate from the deck count in the header.
+      // All layout reads first, then all style writes, so the browser
+      // computes layout once instead of once per card.
       const deckRect = deckStatusEl.getBoundingClientRect();
-      boardEl.querySelectorAll(".card-enter").forEach((el, index) => {
-        const r = el.getBoundingClientRect();
+      const entering = [...boardEl.querySelectorAll(".card-enter")];
+      const enterRects = entering.map((el) => el.getBoundingClientRect());
+      const lastRects = new Map();
+      cards.forEach((card) => {
+        const el = existing.get(card.code);
+        if (el && firstRects.has(card.code))
+          lastRects.set(card.code, el.getBoundingClientRect());
+      });
+
+      // Deal-in cards animate from the deck count in the header.
+      entering.forEach((el, index) => {
+        const r = enterRects[index];
         el.style.animationDelay = `${index * 35}ms`;
         el.style.setProperty(
           "--deal-x",
@@ -1209,7 +1249,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (!el) return;
         const first = firstRects.get(card.code);
         if (!first) return;
-        const last = el.getBoundingClientRect();
+        const last = lastRects.get(card.code);
         const dx = first.left - last.left;
         const dy = first.top - last.top;
         if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;

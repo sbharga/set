@@ -5,7 +5,7 @@ import pytest
 from set_game.app import create_app, socketio
 from set_game.bot import BOT_PLAYER_ID
 from set_game.game import Phase
-from set_game.rooms import registry
+from set_game.rooms import RoomCapacityError, registry
 
 PLAYER_ID = "player-identifier-01"
 PLAYER_TOKEN = "a" * 64
@@ -334,3 +334,21 @@ def test_stale_bot_thought_cannot_steal_a_human_buzz(monkeypatch):
         assert game.buzz.player_id == human_id
     finally:
         registry.remove(game.room_code)
+
+
+def test_room_creation_is_refused_once_the_registry_is_full(app, monkeypatch):
+    monkeypatch.setattr("set_game.rooms.MAX_ROOMS", len(registry.all_room_codes()))
+    with pytest.raises(RoomCapacityError):
+        registry.create_room()
+
+    client = socketio.test_client(app)
+    try:
+        client.emit("create_room", {"name": "Alice"})
+        received = client.get_received()
+    finally:
+        client.disconnect()
+
+    assert [event["name"] for event in received] == ["action_error"]
+    assert received[0]["args"][0]["message"] == (
+        "The server is full right now. Please try again in a minute."
+    )

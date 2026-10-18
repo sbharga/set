@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import hashlib
 import os
 import secrets
+from functools import lru_cache
 
 from flask import Flask, Response, abort, render_template, request, url_for
+from flask_compress import Compress
 from flask_socketio import SocketIO
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.security import safe_join
 
 from .rooms import is_valid_room_code
 
@@ -17,11 +21,46 @@ from .rooms import is_valid_room_code
 # need explicit locking -- see the concurrency note in game.py.
 # `None` accepts only same-origin Socket.IO requests. Render terminates TLS
 # before the app; ProxyFix below restores the original scheme/host safely.
-socketio = SocketIO(async_mode="threading")
+# The app never uses `flask.session`, so Flask-SocketIO's per-event session
+# wrapping is wasted work. No legitimate client message approaches 64 KB
+# (the default limit is 1 MB).
+socketio = SocketIO(
+    async_mode="threading", manage_session=False, max_http_buffer_size=64 * 1024
+)
+compress = Compress()
+
+STATIC_MAX_AGE_SECONDS = 31536000
+
+
+@lru_cache(maxsize=256)
+def _file_digest(path: str, mtime_ns: int, size: int) -> str:
+    # mtime/size are part of the cache key so an edited file gets a new hash
+    # without a restart (dev); production files never change.
+    with open(path, "rb") as file:
+        return hashlib.sha256(file.read()).hexdigest()[:12]
 
 
 def create_app() -> Flask:
     app = Flask(__name__)
+
+    def static_version(filename: str) -> str | None:
+        assert app.static_folder
+        path = safe_join(app.static_folder, filename)
+        if path is None:
+            return None
+        try:
+            stat = os.stat(path)
+        except OSError:
+            return None
+        return _file_digest(path, stat.st_mtime_ns, stat.st_size)
+
+    @app.url_defaults
+    def version_static_urls(endpoint: str, values: dict) -> None:
+        if endpoint == "static" and "filename" in values:
+            version = static_version(values["filename"])
+            if version:
+                values["v"] = version
+
     production = os.environ.get("SET_ENV") == "production"
     secret_key = os.environ.get("SECRET_KEY")
     if production and not secret_key:
@@ -43,7 +82,22 @@ def create_app() -> Flask:
             app.wsgi_app, x_for=1, x_proto=1, x_host=1
         )
 
+    compress.init_app(app)
     socketio.init_app(app)
+
+    @app.after_request
+    def cache_static_assets(response):
+        # Only a request carrying the current content hash may be cached
+        # forever; a missing/stale `v` keeps Flask's revalidating default.
+        if request.endpoint == "static" and response.status_code in (200, 304):
+            version = request.args.get("v")
+            filename = (request.view_args or {}).get("filename", "")
+            if version and version == static_version(filename):
+                response.cache_control.no_cache = None
+                response.cache_control.public = True
+                response.cache_control.max_age = STATIC_MAX_AGE_SECONDS
+                response.cache_control.immutable = True
+        return response
 
     @app.after_request
     def security_headers(response):

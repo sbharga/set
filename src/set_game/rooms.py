@@ -19,12 +19,18 @@ from .game import Game
 # read aloud or type from a phone screenshot.
 CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
 CODE_LENGTH = 10
+# Caps memory use from room-creation spam; far above any real LAN/friends load.
+MAX_ROOMS = 1000
 
 
 def is_valid_room_code(room_code: str) -> bool:
     return len(room_code) == CODE_LENGTH and all(
         char in CODE_ALPHABET for char in room_code
     )
+
+
+class RoomCapacityError(RuntimeError):
+    """Raised when the registry already holds MAX_ROOMS rooms."""
 
 
 class RoomRegistry:
@@ -39,6 +45,8 @@ class RoomRegistry:
 
     def create_room(self) -> Game:
         with self._lock:
+            if len(self._rooms) >= MAX_ROOMS:
+                raise RoomCapacityError("room limit reached")
             for _ in range(50):
                 code = self._generate_code()
                 if code not in self._rooms:
