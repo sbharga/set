@@ -30,6 +30,7 @@ socketio = SocketIO(
 compress = Compress()
 
 STATIC_MAX_AGE_SECONDS = 31536000
+CONTACT_EMAIL = "hello@shreyas.com"
 
 
 @lru_cache(maxsize=256)
@@ -42,6 +43,7 @@ def _file_digest(path: str, mtime_ns: int, size: int) -> str:
 
 def create_app() -> Flask:
     app = Flask(__name__)
+    app.jinja_env.globals["contact_email"] = CONTACT_EMAIL
 
     def static_version(filename: str) -> str | None:
         assert app.static_folder
@@ -131,6 +133,22 @@ def create_app() -> Flask:
     @app.get("/healthz")
     def healthz():
         return {"status": "ok"}
+
+    @app.get("/contact")
+    def contact():
+        return render_template("contact.html")
+
+    @app.get("/privacy")
+    def privacy():
+        return render_template("privacy.html")
+
+    @app.get("/terms")
+    def terms():
+        return render_template("terms.html")
+
+    @app.get("/credits")
+    def credits():
+        return render_template("credits.html")
 
     @app.get("/robots.txt")
     def robots():

@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block body_class %}legal-page{% endblock %}
+
+{% block content %}
+  <article class="legal">
+    <h1>{{ legal_title }}</h1>
+    {% if legal_updated %}
+      <p class="legal-updated">Last updated {{ legal_updated }}</p>
+    {% endif %}
+    {% block legal_body %}{% endblock %}
+    <p class="legal-back"><a href="{{ url_for('index') }}">&larr; Back to SET</a></p>
+  </article>
+{% endblock %}
+
+{% block site_footer %}{% include "_site_footer.html" %}{% endblock %}

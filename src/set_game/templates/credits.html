@@ -1,0 +1,49 @@
+{% extends "legal.html" %}
+{% set legal_title = "Credits" %}
+{% set seo_title = "Credits | SET" %}
+{% set seo_description = "Who invented SET, who built this online version, and the open-source projects it runs on." %}
+{% set seo_canonical = url_for('credits', _external=true) %}
+{% set seo_social_url = seo_canonical %}
+
+{% block legal_body %}
+  <h2>The game</h2>
+  <p>
+    SET is a card game invented by Marsha Falco in 1974. SET® is a registered
+    trademark of Set Enterprises, Inc., and the physical game is published by
+    PlayMonster. This website is an unofficial, independent fan project. It is
+    not affiliated with, sponsored by, or endorsed by Set Enterprises or
+    PlayMonster. If you enjoy it, please support the creators by buying the
+    real game.
+  </p>
+
+  <h2>This version</h2>
+  <p>
+    Built and run by Shreyas. The source code is on
+    <a href="https://github.com/sbharga/set" rel="noopener">GitHub</a> and is
+    released under the
+    <a href="https://creativecommons.org/publicdomain/zero/1.0/" rel="noopener"
+      >CC0 1.0</a
+    >
+    public domain dedication. Card artwork is drawn by the app as SVG, sounds
+    are synthesized in your browser with the Web Audio API, and text uses your
+    device's system fonts.
+  </p>
+
+  <h2>Open-source software</h2>
+  <p>Thank you to the maintainers of the projects this site depends on:</p>
+  <ul>
+    <li><a href="https://flask.palletsprojects.com/" rel="noopener">Flask</a> and Werkzeug (BSD-3-Clause)</li>
+    <li><a href="https://flask-socketio.readthedocs.io/" rel="noopener">Flask-SocketIO</a>, python-socketio, and python-engineio (MIT)</li>
+    <li><a href="https://socket.io/" rel="noopener">Socket.IO</a> browser client &copy; 2014&ndash;2024 Guillermo Rauch (MIT)</li>
+    <li><a href="https://github.com/colour-science/flask-compress" rel="noopener">Flask-Compress</a> (MIT)</li>
+    <li><a href="https://gunicorn.org/" rel="noopener">Gunicorn</a> (MIT)</li>
+    <li><a href="https://caddyserver.com/" rel="noopener">Caddy</a> (Apache-2.0)</li>
+  </ul>
+
+  <h2>Corrections</h2>
+  <p>
+    If something here is missing or wrong, or you represent a rights holder
+    with a concern, please email
+    <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.
+  </p>
+{% endblock %}

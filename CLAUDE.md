@@ -69,6 +69,8 @@ Static assets are served with content-hashed URLs: an `app.url_defaults` hook in
 
 Countdown writers in `game.js` run every animation frame; use `setTextIfChanged` / `setAttributeIfChanged` there so unchanged values don't touch the DOM (notably the `aria-live` regions).
 
+`/contact`, `/privacy`, `/terms` and `/credits` are static information pages (`templates/legal.html` + one template each, footer in `_site_footer.html`, shown on the home page and these pages only, never in a room). The contact address lives in `CONTACT_EMAIL` in `app.py`. `privacy.html` makes factual claims about what the app stores (sessionStorage/localStorage keys, hashed tokens, no cookies, in-memory rooms) — update it whenever that changes.
+
 Room codes exist only as the opaque `/room/<code>` URL path (so invite links work) — they are deliberately never rendered anywhere in the UI. Games are displayed and joined by title (`Game.title`, derived from the host's name), since this app targets small local/LAN groups, not public room browsing.
 
 ### `hidden` attribute vs. explicit `display`
