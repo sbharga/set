@@ -91,16 +91,34 @@ def is_set(a: int, b: int, c: int) -> bool:
     return True
 
 
-def find_any_set(cards: list[int]) -> tuple[int, int, int] | None:
-    """First valid triple found among `cards` (ignoring None gaps), or None.
+def _third_card(a: int, b: int) -> int:
+    code = 0
+    for divisor in (27, 9, 3, 1):
+        code += (-((a // divisor) % 3 + (b // divisor) % 3) % 3) * divisor
+    return code
 
-    Board sizes in play are at most ~21 cards, so brute-force combinations
-    (at most C(21,3) = 1330) is effectively instant.
+
+# _THIRD_CARD[a][b]: the unique card completing a SET with distinct a, b.
+_THIRD_CARD = tuple(
+    tuple(_third_card(a, b) for b in range(DECK_SIZE)) for a in range(DECK_SIZE)
+)
+
+
+def find_any_set(cards: list[int]) -> tuple[int, int, int] | None:
+    """First valid triple among `cards` (ignoring None gaps), or None.
+
+    "First" is `itertools.combinations` order: the minimal `(i, j)` whose
+    unique completing card sits after `j`. O(n^2) lookups instead of
+    O(n^3) triples. Assumes distinct cards, which a dealt board always has.
     """
     present = [c for c in cards if c is not None]
-    for a, b, c in combinations(present, 3):
-        if is_set(a, b, c):
-            return (a, b, c)
+    position = {code: index for index, code in enumerate(present)}
+    for i, a in enumerate(present):
+        completes = _THIRD_CARD[a]
+        for j in range(i + 1, len(present)):
+            k = position.get(completes[present[j]], -1)
+            if k > j:
+                return (a, present[j], present[k])
     return None
 
 

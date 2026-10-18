@@ -22,6 +22,7 @@
 
     <meta property="og:site_name" content="SET" />
     <meta property="og:type" content="website" />
+    <meta property="og:locale" content="en_US" />
     <meta
       property="og:title"
       content="{{ seo_title|default('Play SET Online with Friends') }}"
@@ -72,6 +73,7 @@
       rel="apple-touch-icon"
       href="{{ url_for('static', filename='img/apple-touch-icon.png') }}"
     />
+    {% block head_extra %}{% endblock %}
   </head>
   <body class="{% block body_class %}{% endblock %}">
     <a class="skip-link" href="#main-content">Skip to main content</a>

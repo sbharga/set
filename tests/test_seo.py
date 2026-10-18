@@ -1,3 +1,5 @@
+import re
+
 import pytest
 
 from set_game.app import create_app
@@ -24,6 +26,8 @@ def test_home_exposes_search_and_social_metadata(app):
     assert 'property="og:image"' in html
     assert 'name="twitter:card" content="summary_large_image"' in html
     assert 'itemtype="https://schema.org/VideoGame"' in html
+    assert '"@type": "WebSite"' in html
+    assert 'property="og:locale" content="en_US"' in html
 
 
 def test_private_rooms_are_not_indexable(app):
@@ -88,3 +92,19 @@ def test_production_https_uses_transport_security_headers(monkeypatch):
 
     assert response.status_code == 200
     assert response.headers["Strict-Transport-Security"].startswith("max-age=31536000")
+
+
+def test_versioned_static_assets_are_immutable_but_stale_versions_revalidate(app):
+    with app.test_client() as client:
+        home = client.get("/").get_data(as_text=True)
+        match = re.search(r"/static/css/style\.css\?v=([0-9a-f]{12})", home)
+        assert match
+        current = client.get(match.group(0))
+        stale = client.get("/static/css/style.css?v=000000000000")
+        unversioned = client.get("/static/css/style.css")
+
+    assert "immutable" in current.headers["Cache-Control"]
+    assert "max-age=31536000" in current.headers["Cache-Control"]
+    for response in (stale, unversioned):
+        assert "no-cache" in response.headers["Cache-Control"]
+        assert "immutable" not in response.headers["Cache-Control"]

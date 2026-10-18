@@ -65,6 +65,10 @@ Each page's controller (`static/js/game.js`, `home.js`) is a single `DOMContentL
 
 The board (`game.js`'s `syncBoard`) reconciles by diffing against existing DOM nodes keyed by `data-code`, not a full `innerHTML` wipe — this is what makes FLIP-style repositioning animation possible when the board recompacts after a claim. Any change to board rendering should preserve this keyed-reconciliation property.
 
+Static assets are served with content-hashed URLs: an `app.url_defaults` hook in `app.py` appends `?v=<12-hex sha256>` to every `url_for('static', ...)`, and responses whose `v` matches the current file hash get `Cache-Control: public, max-age=31536000, immutable` (a missing/stale `v` keeps Flask's `no-cache` revalidation). Always reference assets through `url_for('static', ...)`, never a hard-coded `/static/` path, or they lose cache-busting. Responses are compressed by Flask-Compress. Clients connect WebSocket-first (`transports: ["websocket", "polling"]`, `tryAllTransports`), so polling is only a fallback.
+
+Countdown writers in `game.js` run every animation frame; use `setTextIfChanged` / `setAttributeIfChanged` there so unchanged values don't touch the DOM (notably the `aria-live` regions).
+
 Room codes exist only as the opaque `/room/<code>` URL path (so invite links work) — they are deliberately never rendered anywhere in the UI. Games are displayed and joined by title (`Game.title`, derived from the host's name), since this app targets small local/LAN groups, not public room browsing.
 
 ### `hidden` attribute vs. explicit `display`

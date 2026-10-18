@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import logging
 import re
 import threading
 import time
@@ -39,7 +40,9 @@ from .game import (
     Game,
     Phase,
 )
-from .rooms import is_valid_room_code, registry
+from .rooms import RoomCapacityError, is_valid_room_code, registry
+
+logger = logging.getLogger(__name__)
 
 MIN_PLAYERS_TO_START = 2
 REAPER_INTERVAL_SECONDS = 5
@@ -60,8 +63,9 @@ _membership_lock = threading.RLock()
 _reaper_lock = threading.Lock()
 _reaper_started = False
 # A tiny in-process guard against accidental key-repeat and abusive clients.
-# It limits only mutating game events; normal reconnect/recovery traffic is
-# unaffected and no cross-room/global lock is held while game logic runs.
+# It limits mutating game events and room creation/join; 30/s is far above
+# any legitimate reconnect rate, and no cross-room/global lock is held while
+# game logic runs.
 _action_rate_lock = threading.Lock()
 _action_windows: dict[str, deque[float]] = {}
 MAX_MUTATIONS_PER_SECOND = 30
@@ -375,12 +379,17 @@ def _bot_select_cards(
 
 @socketio.on("create_room")
 def on_create_room(data=None):
+    if not _mutation_allowed():
+        return
     # The name is retained in the event for backwards-compatible clients,
     # but creating a private room does not publish or reserve a public seat.
     name = _text_field(data, "name")
     if not _valid_name(name):
         return _error("Enter a nickname using up to 20 printable characters.")
-    game = registry.create_room()
+    try:
+        game = registry.create_room()
+    except RoomCapacityError:
+        return _error("The server is full right now. Please try again in a minute.")
     emit("room_created", {"room_code": game.room_code})
 
 
@@ -391,6 +400,8 @@ def on_join_room(data=None):
     player_id = _text_field(data, "player_id")
     player_token = _text_field(data, "player_token")
 
+    if not _mutation_allowed():
+        return
     if not _valid_name(name):
         return _error("Enter a nickname using up to 20 printable characters.")
     if not PLAYER_ID_RE.fullmatch(player_id) or not PLAYER_TOKEN_RE.fullmatch(
@@ -920,6 +931,25 @@ def on_vote_no_set():
 # --- background maintenance -------------------------------------------------
 
 
+def _reap_room(room_code: str, now: float) -> None:
+    # Joining and collection are one membership transaction, so a
+    # successful join cannot be orphaned from the registry.
+    with _membership_lock:
+        game = registry.get(room_code)
+        if not game:
+            return
+        with game.lock:
+            removed = game.drop_stale_disconnects(now)
+            is_empty = (
+                not game.human_players()
+                and (now - game.created_at) > ROOM_CREATION_GRACE_SECONDS
+            )
+            if removed:
+                _emit_players_updated(game, now)
+            if is_empty:
+                registry.remove(room_code)
+
+
 def start_background_reaper(sio) -> None:
     global _reaper_started
     with _reaper_lock:
@@ -932,21 +962,9 @@ def start_background_reaper(sio) -> None:
             sio.sleep(REAPER_INTERVAL_SECONDS)
             now = _now()
             for room_code in registry.all_room_codes():
-                # Joining and collection are one membership transaction, so a
-                # successful join cannot be orphaned from the registry.
-                with _membership_lock:
-                    game = registry.get(room_code)
-                    if not game:
-                        continue
-                    with game.lock:
-                        removed = game.drop_stale_disconnects(now)
-                        is_empty = (
-                            not game.human_players()
-                            and (now - game.created_at) > ROOM_CREATION_GRACE_SECONDS
-                        )
-                        if removed:
-                            _emit_players_updated(game, now)
-                        if is_empty:
-                            registry.remove(room_code)
+                try:
+                    _reap_room(room_code, now)
+                except Exception:
+                    logger.exception("Room reaper failed for room %s", room_code)
 
     sio.start_background_task(_loop)
