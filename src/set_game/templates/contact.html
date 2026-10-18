@@ -1,0 +1,42 @@
+{% extends "legal.html" %}
+{% set legal_title = "Contact" %}
+{% set seo_title = "Contact | SET" %}
+{% set seo_description = "How to contact the person who runs SET: bug reports, feedback, privacy requests, and takedown notices." %}
+{% set seo_canonical = url_for('contact', _external=true) %}
+{% set seo_social_url = seo_canonical %}
+
+{% block legal_body %}
+  <p>
+    SET is a small independent project run by Shreyas. The best way to reach me
+    is by email:
+  </p>
+  <p class="legal-callout">
+    <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>
+  </p>
+
+  <h2>What to write about</h2>
+  <ul>
+    <li>Bugs, broken games, or things that look wrong on your device.</li>
+    <li>Ideas and feedback.</li>
+    <li>
+      Privacy questions or requests. See the
+      <a href="{{ url_for('privacy') }}">Privacy Policy</a>.
+    </li>
+    <li>
+      Abuse, or a trademark or copyright concern. See the
+      <a href="{{ url_for('terms') }}">Terms</a> and
+      <a href="{{ url_for('credits') }}">Credits</a>.
+    </li>
+  </ul>
+
+  <p>
+    This is a hobby project, so replies may not be immediate. If you are
+    reporting a bug, please include your browser, your device, and what you
+    were doing when it happened. The source code is also public on
+    <a href="https://github.com/sbharga/set" rel="noopener">GitHub</a>.
+  </p>
+  <p>
+    Please never include your game's invite link in public posts if you want
+    to keep the room private.
+  </p>
+{% endblock %}

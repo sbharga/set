@@ -1,0 +1,101 @@
+{% extends "legal.html" %}
+{% set legal_title = "Privacy Policy" %}
+{% set legal_updated = "18 October 2026" %}
+{% set seo_title = "Privacy Policy | SET" %}
+{% set seo_description = "What SET stores about you: a nickname for the length of a game, no accounts, no ads, no analytics." %}
+{% set seo_canonical = url_for('privacy', _external=true) %}
+{% set seo_social_url = seo_canonical %}
+
+{% block legal_body %}
+  <p>
+    SET is a free multiplayer card game run by Shreyas. In short: there are no
+    accounts, no ads, no analytics, and the game sets no cookies. This page
+    explains what is handled so you can decide whether you are comfortable
+    playing.
+  </p>
+
+  <h2>What the game handles</h2>
+  <ul>
+    <li>
+      <strong>Your nickname</strong> (up to 20 characters). You type it, and
+      everyone in your room can see it. Please do not use your real full name
+      or other personal details.
+    </li>
+    <li>
+      <strong>A random player ID and secret token</strong> created in your
+      browser so you can get back to your seat if your connection drops. The
+      server keeps the ID and only a SHA-256 hash of the token.
+    </li>
+    <li>
+      <strong>Game activity</strong>: your score, which cards you pick, and
+      when you press the buttons, which is needed to run the game.
+    </li>
+    <li>
+      <strong>The room</strong>. Anyone who has a room's invite link can join
+      it and see the nicknames and scores in it.
+    </li>
+  </ul>
+
+  <h2>How long it is kept</h2>
+  <p>
+    Game data lives only in the server's memory. It is never written to a
+    database. A room is removed automatically once nobody is in it, and every
+    room disappears when the server restarts.
+  </p>
+
+  <h2>What is stored in your browser</h2>
+  <ul>
+    <li>
+      <strong>Session storage</strong> (cleared when you close the tab): your
+      nickname, player ID, and token.
+    </li>
+    <li>
+      <strong>Local storage</strong> (stays until you clear your browser data):
+      whether sound is muted and your chosen card colors.
+    </li>
+    <li><strong>Cookies</strong>: the game itself sets none.</li>
+  </ul>
+
+  <h2>Hosting and server logs</h2>
+  <p>
+    The site runs on a server at Google Cloud and is served through Cloudflare.
+    When you load a page, these services receive technical request data such
+    as your IP address, the page requested, your browser's user agent, and the
+    time. This is used to deliver the site, keep it secure, and fix problems.
+    Logs are kept only as long as the servers' default log rotation keeps them.
+    Cloudflare may set its own security cookies and handles that data under
+    <a href="https://www.cloudflare.com/privacypolicy/" rel="noopener">its own
+    privacy policy</a>.
+  </p>
+
+  <h2>Sharing</h2>
+  <p>
+    I do not sell your data or share it for advertising. The only other people
+    who see your nickname and score are the players in your room. The hosting
+    providers above process request data on my behalf in order to run the site.
+  </p>
+
+  <h2>Children</h2>
+  <p>
+    SET is not directed at children under 13 and is not designed to collect
+    their personal information. Nicknames should never include personal
+    details.
+  </p>
+
+  <h2>Your choices and rights</h2>
+  <p>
+    You can leave a room at any time, close the tab to clear session storage,
+    and clear your browser data to remove local settings. Because there are no
+    accounts and game data is temporary, there is usually little for me to
+    look up. If you are in the UK or EU you may have rights to access, correct,
+    or erase personal data, to object to its use, and to complain to your
+    data protection authority. To make a request, email
+    <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.
+  </p>
+
+  <h2>Changes</h2>
+  <p>
+    If this policy changes, the date at the top will be updated. Questions are
+    welcome on the <a href="{{ url_for('contact') }}">contact page</a>.
+  </p>
+{% endblock %}

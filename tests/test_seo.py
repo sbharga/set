@@ -108,3 +108,23 @@ def test_versioned_static_assets_are_immutable_but_stale_versions_revalidate(app
     for response in (stale, unversioned):
         assert "no-cache" in response.headers["Cache-Control"]
         assert "immutable" not in response.headers["Cache-Control"]
+
+
+@pytest.mark.parametrize("path", ["/contact", "/privacy", "/terms", "/credits"])
+def test_information_pages_are_indexable_with_their_own_canonical(app, path):
+    with app.test_client() as client:
+        response = client.get(path)
+
+    html = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert f'rel="canonical"\n        href="http://localhost{path}"' in html
+    assert "noindex" not in html
+    assert 'href="mailto:hello@shreyas.com"' in html
+
+
+def test_home_footer_links_to_every_information_page(app):
+    with app.test_client() as client:
+        html = client.get("/").get_data(as_text=True)
+
+    for path in ("/contact", "/privacy", "/terms", "/credits"):
+        assert f'href="{path}"' in html

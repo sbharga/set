@@ -2075,3 +2075,94 @@ kbd {
     outline-offset: 2px;
   }
 }
+
+/* Site footer and information pages (home, contact, privacy, terms, credits) */
+.site-footer {
+  width: 100%;
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 0 var(--space-5)
+    calc(var(--space-5) + env(safe-area-inset-bottom));
+  color: var(--ink-faint);
+  font-size: var(--text-xs);
+}
+.site-footer-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+}
+.site-footer a {
+  color: var(--ink-soft);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.site-footer a:hover {
+  color: var(--accent);
+}
+.site-footer-note {
+  max-width: 560px;
+  margin: var(--space-2) 0 0;
+}
+.legal {
+  max-width: 720px;
+  margin: 0 auto;
+}
+.legal h1 {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: 750;
+  letter-spacing: -0.03em;
+}
+.legal h2 {
+  margin: var(--space-6) 0 var(--space-2);
+  font-size: var(--text-lg);
+}
+.legal p,
+.legal li {
+  color: var(--ink-soft);
+}
+.legal ul {
+  padding-left: var(--space-5);
+}
+.legal li + li {
+  margin-top: var(--space-2);
+}
+.legal a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+.legal-updated {
+  margin: var(--space-1) 0 var(--space-5);
+  color: var(--ink-faint);
+  font-size: var(--text-sm);
+}
+.legal-callout {
+  font-size: var(--text-xl);
+  font-weight: 650;
+}
+.legal-back {
+  margin-top: var(--space-6);
+}
+@media (max-width: 640px) {
+  .site-footer {
+    padding-right: var(--space-4);
+    padding-left: var(--space-4);
+  }
+}
+/* Keep the home footer in view: the content area absorbs the leftover height
+   instead of forcing the page to scroll. */
+.home-page {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+.home-page .content {
+  display: flex;
+  flex: 1 0 auto;
+  width: 100%;
+  min-height: 0;
+}
+.home-page .home {
+  min-height: 0;
+}

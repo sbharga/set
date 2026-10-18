@@ -1,0 +1,71 @@
+{% extends "legal.html" %}
+{% set legal_title = "Terms of Use" %}
+{% set legal_updated = "18 October 2026" %}
+{% set seo_title = "Terms of Use | SET" %}
+{% set seo_description = "The simple rules for using SET: play fair, be kind, and expect a free hobby service with no guarantees." %}
+{% set seo_canonical = url_for('terms', _external=true) %}
+{% set seo_social_url = seo_canonical %}
+
+{% block legal_body %}
+  <p>
+    By using this website you agree to these terms. If you do not agree,
+    please do not use the site.
+  </p>
+
+  <h2>Using SET</h2>
+  <p>
+    SET is a free, personal, non-commercial game for you and your friends. You
+    do not need an account. Please use the site the way it was designed:
+    through a normal web browser.
+  </p>
+
+  <h2>Playing fair and being kind</h2>
+  <ul>
+    <li>
+      Do not use nicknames that are hateful, harassing, sexually explicit,
+      illegal, or that impersonate someone else.
+    </li>
+    <li>
+      Do not attack, scan, overload, or reverse engineer the service, and do
+      not try to get around its rate limits or room limits.
+    </li>
+    <li>
+      Do not use scripts or bots to join rooms or flood the server. The
+      built-in SET Bot is the only automated player.
+    </li>
+  </ul>
+  <p>
+    Hosts can remove players from their room. I may remove rooms or block
+    access for anyone who abuses the service.
+  </p>
+
+  <h2>Rooms are temporary</h2>
+  <p>
+    Rooms and scores are kept in memory and can disappear at any time, for
+    example when a room empties or the server restarts. The service may be
+    changed, interrupted, or shut down without notice.
+  </p>
+
+  <h2>Trademarks and ownership</h2>
+  <p>
+    SET® and the original card game belong to their owners. This site is an
+    unofficial fan project; see <a href="{{ url_for('credits') }}">Credits</a>.
+    The source code of this site is released under the CC0 1.0 public domain
+    dedication.
+  </p>
+
+  <h2>No warranty and limit of liability</h2>
+  <p>
+    The site is provided "as is" and "as available", without warranties of
+    any kind. To the fullest extent allowed by law, I am not liable for any
+    loss or damage arising from your use of, or inability to use, the site.
+  </p>
+
+  <h2>Changes</h2>
+  <p>
+    I may update these terms. Continuing to use the site after a change means
+    you accept the new version. See also the
+    <a href="{{ url_for('privacy') }}">Privacy Policy</a>. Questions? Email
+    <a href="mailto:{{ contact_email }}">{{ contact_email }}</a>.
+  </p>
+{% endblock %}
