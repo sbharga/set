@@ -17,7 +17,7 @@
 
 /* Per-room identity credentials are a security boundary: unlike the old
  * Math.random fallback, these are generated only from Web Crypto, available
- * under Render's mandatory HTTPS. The token is never sent to other players. */
+ * under the site's mandatory HTTPS. The token is never sent to other players. */
 function generateSecureId() {
   if (window.crypto && typeof window.crypto.randomUUID === "function")
     return window.crypto.randomUUID();
@@ -152,6 +152,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const stageCaptionEl = document.getElementById("stage-caption");
   const buzzCaptionEl = document.getElementById("buzz-caption");
   const buzzCaptionNameEl = document.getElementById("buzz-caption-name");
+  const buzzCaptionVerbEl = document.getElementById("buzz-caption-verb");
   const buzzCaptionSecondsEl = document.getElementById("buzz-caption-seconds");
   const buzzBarFillEl = document.getElementById("buzz-bar-fill");
   const revealCaptionEl = document.getElementById("reveal-caption");
@@ -318,7 +319,8 @@ document.addEventListener("DOMContentLoaded", () => {
   socket.on("disconnect", (reason) => {
     connectionReady = false;
     joinPending = false;
-    if (reason === "io server disconnect" && !removedFromRoom) {
+    if (removedFromRoom) return;
+    if (reason === "io server disconnect") {
       showTerminalConnection(
         "This player seat was opened in another tab. Reload to take the seat back.",
       );
@@ -353,6 +355,7 @@ document.addEventListener("DOMContentLoaded", () => {
     );
     if (data.title) latestSnapshot.title = data.title;
     latestSnapshot.players = data.players || latestSnapshot.players;
+    syncLockoutDeadlines(latestSnapshot.players, performance.now());
     if (Object.prototype.hasOwnProperty.call(data, "bot_difficulty"))
       latestSnapshot.bot_difficulty = data.bot_difficulty;
     if (data.winner_ids) latestSnapshot.winner_ids = data.winner_ids;
@@ -364,6 +367,7 @@ document.addEventListener("DOMContentLoaded", () => {
     else if (latestSnapshot.phase === "playing")
       renderPlayers(latestSnapshot.players, latestSnapshot.buzz);
     else renderGameOver(latestSnapshot);
+    ensureTicking();
     const joined = (data.players || []).find(
       (player) => !previousPlayers.has(player.player_id),
     );
@@ -725,11 +729,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (isHost()) {
       startBtn.hidden = false;
       startBtn.disabled = !connectionReady || activeCount < 2;
-      hint.textContent =
-        activeCount < 2 ? "Need at least 2 players to start." : "";
+      setTextIfChanged(
+        hint,
+        activeCount < 2 ? "Need at least 2 players to start." : "",
+      );
     } else {
       startBtn.hidden = true;
-      hint.textContent = "Waiting for the host to start the game…";
+      setTextIfChanged(hint, "Waiting for the host to start the game…");
     }
   }
 
@@ -1503,6 +1509,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const amBuzzer = data.player_id === myPlayerId;
     boardEl.classList.toggle("dimmed", !amBuzzer);
     buzzCaptionNameEl.textContent = amBuzzer ? "You" : data.name;
+    buzzCaptionVerbEl.textContent = amBuzzer ? "are" : "is";
     buzzBarFillEl.style.width = "100%";
     buzzBarFillEl.classList.remove("urgent");
     revealCaptionEl.hidden = true;
@@ -1538,10 +1545,12 @@ document.addEventListener("DOMContentLoaded", () => {
     // nothing more specific claimed the key first.
     if (e.key === " " || e.code === "Space") {
       e.preventDefault();
+      if (e.repeat) return;
       if (!controlsState(performance.now()).disabled) socket.emit("buzz");
       return;
     }
     if (e.key.toLowerCase() === "n") {
+      if (e.repeat) return;
       if (!controlsState(performance.now()).voteDisabled)
         socket.emit("vote_no_set");
       return;
@@ -1559,8 +1568,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
-  buzzBtn.addEventListener("click", () => socket.emit("buzz"));
-  noSetBtn.addEventListener("click", () => socket.emit("vote_no_set"));
+  // A double-click's second click (detail > 1) must not send a second action;
+  // keyboard activation has detail 0.
+  buzzBtn.addEventListener("click", (e) => {
+    if (e.detail <= 1) socket.emit("buzz");
+  });
+  noSetBtn.addEventListener("click", (e) => {
+    if (e.detail <= 1) socket.emit("vote_no_set");
+  });
   botDifficultySelect.addEventListener("change", () => {
     const difficulty = botDifficultySelect.value;
     if (
@@ -1574,10 +1589,14 @@ document.addEventListener("DOMContentLoaded", () => {
   });
   document
     .getElementById("start-game-btn")
-    .addEventListener("click", () => socket.emit("start_game"));
+    .addEventListener("click", (e) => {
+      if (e.detail <= 1) socket.emit("start_game");
+    });
   document
     .getElementById("play-again-btn")
-    .addEventListener("click", () => socket.emit("play_again"));
+    .addEventListener("click", (e) => {
+      if (e.detail <= 1) socket.emit("play_again");
+    });
 
   const copyLinkBtn = document.getElementById("copy-link-btn");
   const manualCopyEl = document.getElementById("manual-copy");

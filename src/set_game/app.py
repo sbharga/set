@@ -19,8 +19,9 @@ from .rooms import is_valid_room_code
 # simple-websocket package Flask-SocketIO already pulls in) and, unlike
 # eventlet, isn't deprecated. Real OS threads mean Game state mutations
 # need explicit locking -- see the concurrency note in game.py.
-# `None` accepts only same-origin Socket.IO requests. Render terminates TLS
-# before the app; ProxyFix below restores the original scheme/host safely.
+# `None` accepts only same-origin Socket.IO requests. Cloudflare and the VM's
+# reverse proxy terminate TLS before the app; ProxyFix below restores the
+# original scheme/host safely.
 # The app never uses `flask.session`, so Flask-SocketIO's per-event session
 # wrapping is wasted work. No legitimate client message approaches 64 KB
 # (the default limit is 1 MB).
@@ -75,8 +76,9 @@ def create_app() -> Flask:
         app.config["TRUSTED_HOSTS"] = [
             host.strip() for host in trusted_hosts.split(",") if host.strip()
         ]
-    # Only trust forwarded headers when deployed behind Render's proxy; doing
-    # so for a directly exposed development server would trust client input.
+    # Only trust forwarded headers when deployed behind the production reverse
+    # proxy; doing so for a directly exposed development server would trust
+    # client input.
     if production:
         # Flask documents this assignment, but its type declaration exposes
         # wsgi_app as a method rather than replaceable WSGI middleware.
@@ -188,6 +190,6 @@ def run(host: str | None = None, port: int | None = None) -> None:
     host = host if host is not None else os.environ.get("SET_HOST", "0.0.0.0")
     port = port if port is not None else int(os.environ.get("SET_PORT", "5000"))
     app = create_app()
-    # This path is for local development. Render uses Gunicorn with one
+    # This path is for local development. Production uses Gunicorn with one
     # threaded worker so the in-memory registry is never split across workers.
     socketio.run(app, host=host, port=port, allow_unsafe_werkzeug=True)

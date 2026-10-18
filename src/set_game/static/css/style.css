@@ -104,6 +104,11 @@ button {
   outline: 3px solid var(--accent);
   outline-offset: 3px;
 }
+/* Headings are focused programmatically for screen readers on view change;
+   they are not interactive, so no visible ring. */
+:is(h1, h2)[tabindex="-1"]:focus {
+  outline: none;
+}
 .visually-hidden {
   position: absolute !important;
   width: 1px !important;
@@ -215,9 +220,11 @@ button {
     color var(--dur-fast) ease,
     transform 0.1s ease;
 }
-.icon-btn:hover {
-  background: var(--surface);
-  color: var(--accent);
+@media (hover: hover) {
+  .icon-btn:hover {
+    background: var(--surface);
+    color: var(--accent);
+  }
 }
 .icon-btn:active {
   transform: scale(0.95);
@@ -303,8 +310,10 @@ button {
   font-size: var(--text-sm);
   cursor: pointer;
 }
-.palette-reset:hover {
-  filter: brightness(0.97);
+@media (hover: hover) {
+  .palette-reset:hover {
+    filter: brightness(0.97);
+  }
 }
 .deck-status {
   min-height: 40px;
@@ -435,8 +444,10 @@ button {
   font-size: var(--text-lg);
   transition: border-color var(--dur-fast) ease;
 }
-.text-input:hover {
-  border-color: #c5c5bf;
+@media (hover: hover) {
+  .text-input:hover {
+    border-color: #c5c5bf;
+  }
 }
 .text-input:focus {
   border-color: var(--accent);
@@ -483,17 +494,20 @@ button {
   background: var(--accent);
   color: #fff;
 }
-.btn-primary:hover:not(:disabled) {
-  filter: brightness(1.06);
-  transform: translateY(-1px);
+@media (hover: hover) {
+  .btn-primary:hover:not(:disabled) {
+    filter: brightness(1.06);
+  }
 }
 .btn-secondary {
   border: 1px solid rgba(87, 70, 217, 0.13);
   background: var(--accent-soft);
   color: var(--accent);
 }
-.btn-secondary:hover:not(:disabled) {
-  filter: brightness(0.97);
+@media (hover: hover) {
+  .btn-secondary:hover:not(:disabled) {
+    filter: brightness(0.97);
+  }
 }
 .btn-wide {
   width: 100%;
@@ -519,9 +533,11 @@ button {
   line-height: 1.25;
   cursor: pointer;
 }
-.icon-text-btn:hover {
-  color: var(--danger);
-  text-decoration: underline;
+@media (hover: hover) {
+  .icon-text-btn:hover {
+    color: var(--danger);
+    text-decoration: underline;
+  }
 }
 kbd {
   margin-left: 6px;
@@ -999,10 +1015,6 @@ kbd {
 .board .card {
   width: 100%;
 }
-.card:hover {
-  transform: translateY(-3px);
-  box-shadow: var(--shadow-card-lift);
-}
 .card:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
@@ -1021,10 +1033,6 @@ kbd {
 .card.not-interactive,
 .card[aria-disabled="true"] {
   cursor: default;
-}
-.card.not-interactive:hover {
-  transform: none;
-  box-shadow: var(--shadow-card);
 }
 /* The set-reveal now lights the found cards up in place on the board
    (instead of duplicating them into an overlay), so their vanish and the
@@ -1314,8 +1322,10 @@ kbd {
   background: var(--accent);
   color: #fff;
 }
-.btn-buzz:hover:not(:disabled) {
-  filter: brightness(1.08);
+@media (hover: hover) {
+  .btn-buzz:hover:not(:disabled) {
+    filter: brightness(1.08);
+  }
 }
 .btn-buzz.cooldown {
   background: var(--danger-soft);
@@ -1526,10 +1536,6 @@ kbd {
 .htp-cards .card {
   flex: 1;
   cursor: default;
-}
-.htp-cards .card:hover {
-  transform: none;
-  box-shadow: var(--shadow-card);
 }
 .htp-caption {
   margin: var(--space-2) 0 0;
@@ -1785,17 +1791,16 @@ kbd {
     width: 100%;
     min-width: 0;
   }
+  .game-view #no-set-btn {
+    min-width: 0;
+  }
   .game-view .actions .btn {
     min-height: 48px;
     padding: 10px 12px;
     font-size: var(--text-sm);
   }
   .reveal-features {
-    gap: 6px;
-  }
-  .reveal-feature {
-    padding: 3px 8px;
-    font-size: var(--text-xs);
+    display: none;
   }
   .toast {
     bottom: calc(94px + env(safe-area-inset-bottom));
@@ -1986,19 +1991,6 @@ kbd {
     display: none;
   }
 }
-@media (hover: none) {
-  .card:hover {
-    transform: none;
-    box-shadow: var(--shadow-card);
-  }
-  .card.selected:hover {
-    transform: translateY(-4px) scale(1.02);
-    box-shadow:
-      0 0 0 3px var(--accent-soft),
-      0 0 0 5px var(--accent),
-      var(--shadow-card-lift);
-  }
-}
 @media (prefers-reduced-motion: no-preference) {
   .card.selected:not(.card-enter):not(.card-vanish):not(.card-flip):not(
       .card-invalid
@@ -2096,8 +2088,10 @@ kbd {
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.site-footer a:hover {
-  color: var(--accent);
+@media (hover: hover) {
+  .site-footer a:hover {
+    color: var(--accent);
+  }
 }
 .site-footer-note {
   max-width: 560px;
