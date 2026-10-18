@@ -399,6 +399,24 @@ def test_unanimous_vote_with_empty_deck_ends_the_match():
     assert g.winner_ids
 
 
+def test_final_no_set_deal_ends_match_when_no_set_remains():
+    cap = []  # greedy set-free cards; codes 0..80 yield 16
+    for c in range(81):
+        if all(
+            not deck.is_set(a, b, c) for i, a in enumerate(cap) for b in cap[i + 1 :]
+        ):
+            cap.append(c)
+    g, ids = make_game(seed=16)
+    g.start()
+    g.board = cap[:12]
+    g.deck_remaining = cap[12:15]
+    now = time.monotonic()
+    assert g.toggle_no_set_vote(ids[0], now) == "voted"
+    assert g.toggle_no_set_vote(ids[1], now) == "passed-game-over"
+    assert len(g.board) == 15 and not g.deck_remaining
+    assert g.phase == Phase.FINISHED
+
+
 def test_finish_picks_all_tied_top_scorers():
     g, ids = make_game(n_players=3, seed=11)
     g.start()

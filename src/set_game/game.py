@@ -479,9 +479,10 @@ class Game:
 
         Voting isn't a claim -- it costs nothing and is never wrong, so
         (unlike `can_buzz`) a locked-out player may still vote. Once every
-        active player has voted, 3 more cards are dealt (or, if the deck is
-        empty, the match ends) regardless of whether a set actually exists
-        -- the room's unanimous word is trusted rather than re-checked.
+        active player has voted, 3 more cards are dealt (or the match ends,
+        if the deck is empty or the final deal leaves no set) regardless of
+        whether a set actually exists -- the room's unanimous word is trusted
+        rather than re-checked.
 
         Returns "voted", "unvoted", "passed-dealt", "passed-game-over", or
         a short rejection reason.
@@ -504,10 +505,12 @@ class Game:
         self.no_set_votes.clear()
         if self.deck_remaining:
             self._deal(3)
-            return "passed-dealt"
-        # Deck empty and the room has collectively given up: match over.
-        self._finish()
-        return "passed-game-over"
+            # The final deal can leave an empty deck and a set-free board.
+            self._check_end()
+        else:
+            # Deck empty and the room has collectively given up: match over.
+            self._finish()
+        return "passed-game-over" if self.phase == Phase.FINISHED else "passed-dealt"
 
     def recheck_no_set_vote(self, now: float) -> str | None:
         """Re-evaluate a pending vote after the electorate shrank (a voter
