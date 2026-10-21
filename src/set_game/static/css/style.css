@@ -344,6 +344,7 @@ button {
   padding: clamp(24px, 4vw, 48px) var(--space-5) var(--space-7);
 }
 .room-page .content {
+  max-width: none;
   height: calc(100vh - 64px);
   height: calc(100dvh - 64px);
   min-height: 0;
@@ -857,7 +858,7 @@ kbd {
 
 /* Match */
 .game-view {
-  max-width: 1160px;
+  max-width: 1520px;
   height: 100%;
   min-height: 0;
   margin: 0 auto;
@@ -973,9 +974,8 @@ kbd {
 }
 .card {
   position: relative;
-  max-width: 165px;
   aspect-ratio: 3 / 4;
-  padding: var(--space-3);
+  padding: 0;
   border: 1px solid rgba(222, 223, 217, 0.72);
   border-radius: var(--radius-md);
   background: var(--surface);
@@ -1014,6 +1014,27 @@ kbd {
 }
 .board .card {
   width: 100%;
+  --card-short: min(var(--card-w, 96px), var(--card-h, 128px));
+  border-radius: clamp(10px, calc(var(--card-short) * 0.08), 20px);
+}
+.board .card::after {
+  top: clamp(5px, calc(var(--card-short) * 0.05), 10px);
+  right: clamp(7px, calc(var(--card-short) * 0.06), 12px);
+  font-size: clamp(9px, calc(var(--card-short) * 0.07), 15px);
+}
+/* Landscape cards reuse the portrait artwork turned 90deg (symbols upright,
+   side by side, like a real deck on the table). sizeBoard() in game.js picks
+   the orientation and sets --card-w / --card-h. */
+.board.board-landscape .card {
+  aspect-ratio: 4 / 3;
+}
+.board.board-landscape .card svg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--card-h);
+  height: var(--card-w);
+  transform: translate(-50%, -50%) rotate(90deg);
 }
 .card:focus-visible {
   outline: 2px solid var(--accent);
@@ -1753,7 +1774,6 @@ kbd {
   }
   .board .card {
     min-width: 0;
-    padding: var(--space-2);
   }
   .deck-icon {
     width: 18px;
@@ -1963,6 +1983,38 @@ kbd {
   }
   .waiting-view .row-list {
     max-height: 22dvh;
+  }
+  .game-view {
+    flex-direction: row;
+    align-items: stretch;
+  }
+  .stage {
+    min-width: 0;
+  }
+  .bottom {
+    flex: 0 0 200px;
+    min-height: 0;
+    justify-content: center;
+  }
+  .scoreboard {
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .players {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+  }
+  .actions {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .btn-buzz,
+  #no-set-btn {
+    width: 100%;
+    min-width: 0;
+    padding-inline: var(--space-3);
   }
 }
 

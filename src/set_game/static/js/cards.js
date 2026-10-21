@@ -92,9 +92,9 @@ function saveCardPalette(palette) {
 applyCardPalette(activeCardPalette);
 
 const SYMBOL_Y_POSITIONS = {
-  1: [110],
-  2: [68, 152],
-  3: [36, 110, 184],
+  1: [80],
+  2: [59, 101],
+  3: [38, 80, 122],
 };
 
 function symbolFillStroke(color, shading) {
@@ -104,12 +104,14 @@ function symbolFillStroke(color, shading) {
   if (shading === "solid")
     return { fill: cssColor, stroke: cssColor, strokeWidth: 2 };
   if (shading === "open")
-    return { fill: "none", stroke: cssColor, strokeWidth: 3 };
+    return { fill: "none", stroke: cssColor, strokeWidth: 2.5 };
   // striped
   return { fill: `url(#stripes-${color})`, stroke: cssColor, strokeWidth: 2 };
 }
 
-/** Returns an SVG markup string (viewBox 0 0 160 220) for the given card. */
+/** Returns an SVG markup string (viewBox -6 -8 132 176) for the given card.
+ * Symbols sit in a 120x160 frame centred in that box, so the extra margin
+ * shrinks them to about 51% of the card's short side. */
 function cardSVGMarkup(card) {
   const ys = SYMBOL_Y_POSITIONS[card.number];
   const { fill, stroke, strokeWidth } = symbolFillStroke(
@@ -119,10 +121,10 @@ function cardSVGMarkup(card) {
   const uses = ys
     .map(
       (y) =>
-        `<use href="#sym-${card.shape}" x="80" y="${y}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>`,
+        `<use href="#sym-${card.shape}" x="60" y="${y}" fill="${fill}" stroke="${stroke}" stroke-width="${strokeWidth}" stroke-linejoin="round"/>`,
     )
     .join("");
-  return `<svg viewBox="0 0 160 220" aria-hidden="true" focusable="false">${uses}</svg>`;
+  return `<svg viewBox="-6 -8 132 176" aria-hidden="true" focusable="false">${uses}</svg>`;
 }
 
 function cardAccessibleLabel(card) {
