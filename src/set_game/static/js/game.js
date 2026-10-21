@@ -168,6 +168,9 @@ document.addEventListener("DOMContentLoaded", () => {
     "(prefers-reduced-motion: reduce)",
   ).matches;
   const MOBILE_QUERY = window.matchMedia("(max-width: 640px)");
+  const CARD_ASPECT = 4 / 3; // long side / short side, both orientations
+  const CARD_MIN_SHORT = 48; // px; below this the board may overflow
+  const CARD_MAX_LONG = 360; // px; cap on large monitors
 
   let hasJoined = false;
   let connectionReady = false;
@@ -1106,12 +1109,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   /** Measures .board-stage (a flex box that always fills the remaining
    * stage space regardless of the board's own size -- no feedback loop)
-   * and picks the row/column split and card width that best fills it for
-   * `count` cards, replacing the old hand-tuned dvh/vw clamp guess and the
-   * board-large/xlarge/xxlarge density classes it required. Mobile stays
-   * fixed at 3 columns (that axis is a real layout-mode switch, handled in
-   * CSS); desktop searches a small range of row counts for the one that
-   * yields the biggest card. */
+   * and picks the orientation, row/column split and card width that best
+   * fills it for `count` cards. Cards go landscape (4:3) when that gives a
+   * bigger card than portrait (3:4); both have the same aspect magnitude, so
+   * comparing the short side compares card area. Mobile stays fixed at 3
+   * columns (a real layout-mode switch, handled in CSS); desktop searches a
+   * small range of row counts. Publishes --card-w (grid column width) and
+   * --card-h (rendered card height). */
   function sizeBoard(count) {
     const n = count || boardEl.children.length;
     if (!n) return;
@@ -1119,32 +1123,35 @@ document.addEventListener("DOMContentLoaded", () => {
     if (frameRect.width < 1 || frameRect.height < 1) return;
     const gap = Math.max(8, Math.min(window.innerWidth * 0.013, 16));
     const mobile = MOBILE_QUERY.matches;
-    let rows;
-    let width;
-    if (mobile) {
-      const cols = 3;
-      rows = Math.max(1, Math.ceil(n / cols));
-      const wFromWidth = (frameRect.width - (cols - 1) * gap) / cols;
-      const wFromHeight =
-        ((frameRect.height - (rows - 1) * gap) / rows) * (3 / 4);
-      width = Math.min(wFromWidth, wFromHeight);
-    } else {
-      let best = null;
-      const maxRows = Math.min(Math.max(n, 3), 8);
-      for (let r = 3; r <= maxRows; r++) {
-        const cols = Math.ceil(n / r);
+    // Mobile is a fixed 3-column row-flow grid (CSS); desktop tries 3..8 rows.
+    const rowOptions = [];
+    if (mobile) rowOptions.push(Math.max(1, Math.ceil(n / 3)));
+    else
+      for (let r = 3; r <= Math.min(Math.max(n, 3), 8); r++)
+        rowOptions.push(r);
+    let best = null;
+    for (const landscape of [true, false]) {
+      const heightPerWidth = landscape ? 1 / CARD_ASPECT : CARD_ASPECT;
+      const maxWidth = landscape ? CARD_MAX_LONG : CARD_MAX_LONG / CARD_ASPECT;
+      for (const rows of rowOptions) {
+        const cols = mobile ? 3 : Math.ceil(n / rows);
         const wFromWidth = (frameRect.width - (cols - 1) * gap) / cols;
         const wFromHeight =
-          ((frameRect.height - (r - 1) * gap) / r) * (3 / 4);
-        const candidate = Math.min(wFromWidth, wFromHeight);
-        if (candidate > 0 && (!best || candidate > best.width))
-          best = { rows: r, width: candidate };
+          (frameRect.height - (rows - 1) * gap) / rows / heightPerWidth;
+        const width = Math.min(wFromWidth, wFromHeight, maxWidth);
+        const shortSide = landscape ? width / CARD_ASPECT : width;
+        if (!best || shortSide > best.shortSide)
+          best = { landscape, rows, width, shortSide, heightPerWidth };
       }
-      ({ rows, width } = best || { rows: 3, width: 88 });
     }
-    const clamped = Math.max(72, Math.min(165, width));
-    boardEl.style.setProperty("--card-w", `${clamped}px`);
-    if (!mobile) boardEl.style.setProperty("--board-rows", String(rows));
+    const minWidth = best.landscape
+      ? CARD_MIN_SHORT * CARD_ASPECT
+      : CARD_MIN_SHORT;
+    const width = Math.max(minWidth, best.width);
+    boardEl.classList.toggle("board-landscape", best.landscape);
+    boardEl.style.setProperty("--card-w", `${width}px`);
+    boardEl.style.setProperty("--card-h", `${width * best.heightPerWidth}px`);
+    if (!mobile) boardEl.style.setProperty("--board-rows", String(best.rows));
   }
 
   function onBoardContainerResize() {
