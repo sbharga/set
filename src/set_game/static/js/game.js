@@ -181,6 +181,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let rovingCardCode = null;
   let latestSnapshot = null; // last full room_state we rendered
   let selectedCodes = new Set(); // cards currently highlighted as selected
+  let pendingSelections = new Map(); // card code -> predicted selected state, awaiting this client's card_selected echo
   let lastScores = {}; // player_id -> last-rendered score, to detect bumps
 
   // Local deadlines, all on the performance.now() timeline. Derived from
@@ -322,6 +323,7 @@ document.addEventListener("DOMContentLoaded", () => {
   socket.on("disconnect", (reason) => {
     connectionReady = false;
     joinPending = false;
+    revertPendingSelections();
     if (removedFromRoom) return;
     if (reason === "io server disconnect") {
       showTerminalConnection(
@@ -345,6 +347,7 @@ document.addEventListener("DOMContentLoaded", () => {
       showTerminalConnection(data.message);
       return;
     }
+    revertPendingSelections();
     toast(data.message, "error");
     announce(data.message);
     if (latestSnapshot?.phase === "lobby") updateBotControl(latestSnapshot);
@@ -412,6 +415,7 @@ document.addEventListener("DOMContentLoaded", () => {
   socket.on("buzz_started", (data) => {
     clearSelectionState();
     selectedCodes.clear();
+    pendingSelections.clear();
     // buzz_started/buzz_ended are granular events (not full room_state
     // snapshots), so latestSnapshot.buzz must be kept in sync here too --
     // the click handler and button-enable logic both gate on it.
@@ -448,6 +452,7 @@ document.addEventListener("DOMContentLoaded", () => {
     selectionAnimationGeneration++;
     rejectedSelectionPending = false;
     selectedCodes.clear();
+    pendingSelections.clear();
     boardEl.querySelectorAll(".card.selected, .card.card-invalid").forEach((card) => {
       card.classList.remove("selected", "card-invalid");
       card.style.animationDelay = "";
@@ -457,6 +462,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   socket.on("card_selected", (data) => {
     const card = boardEl.querySelector(`.card[data-code="${data.card}"]`);
+    if (data.player_id === myPlayerId) pendingSelections.delete(data.card);
     if (data.selected) selectedCodes.add(data.card);
     else selectedCodes.delete(data.card);
     if (latestSnapshot?.buzz) {
@@ -464,13 +470,13 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     markCardSelected(card, data.selected);
     updateControlsEnabled();
-    if (data.player_id === myPlayerId) SetAudio.click();
   });
 
   socket.on("set_claimed", (data) => {
     updateScoreboardFromPlayers(data.players);
     deckCountEl.textContent = data.deck_remaining;
     selectedCodes.clear();
+    pendingSelections.clear();
     noSetVoters.clear();
     noSetNeeded = 0;
     if (latestSnapshot) {
@@ -645,6 +651,7 @@ document.addEventListener("DOMContentLoaded", () => {
       showView("waiting");
     } else if (snapshot.phase === "playing") {
       selectedCodes.clear();
+      pendingSelections.clear();
       renderPlayers(snapshot.players, snapshot.buzz);
       deckCountEl.textContent = snapshot.deck_remaining;
       syncBoard(snapshot.board, []);
@@ -909,11 +916,11 @@ document.addEventListener("DOMContentLoaded", () => {
     } else if (
       buzzActive &&
       latestSnapshot.buzz.player_id === myPlayerId &&
-      selectedCodes.size >= 3
+      effectiveSelectedCount() >= 3
     ) {
       label = "Checking your set…";
     } else if (buzzActive && latestSnapshot.buzz.player_id === myPlayerId) {
-      const left = 3 - selectedCodes.size;
+      const left = 3 - effectiveSelectedCount();
       label = `Choose ${left} more card${left === 1 ? "" : "s"}`;
     } else if (buzzActive) {
       label = `${nameFor(latestSnapshot.buzz.player_id)} is choosing`;
@@ -966,13 +973,33 @@ document.addEventListener("DOMContentLoaded", () => {
       });
   }
 
+  function effectiveSelectedCount() {
+    let count = selectedCodes.size;
+    pendingSelections.forEach((sel, code) => {
+      if (sel && !selectedCodes.has(code)) count++;
+      else if (!sel && selectedCodes.has(code)) count--;
+    });
+    return count;
+  }
+
+  function revertPendingSelections() {
+    pendingSelections.forEach((_sel, code) => {
+      markCardSelected(
+        boardEl.querySelector(`.card[data-code="${code}"]`),
+        selectedCodes.has(code),
+      );
+    });
+    pendingSelections.clear();
+    updateControlsEnabled();
+  }
+
   function canSelectCard() {
     return !!(
       connectionReady &&
       latestSnapshot?.phase === "playing" &&
       latestSnapshot.buzz?.player_id === myPlayerId &&
       buzzDeadline > performance.now() &&
-      selectedCodes.size < 3
+      effectiveSelectedCount() < 3
     );
   }
 
@@ -1038,7 +1065,7 @@ document.addEventListener("DOMContentLoaded", () => {
   function updateBuzzTimer(now) {
     const left = Math.max(0, buzzDeadline - now);
     const fraction = buzzDurationMs ? Math.min(1, left / buzzDurationMs) : 0;
-    buzzBarFillEl.style.width = `${fraction * 100}%`;
+    buzzBarFillEl.style.transform = `scaleX(${fraction})`;
     const urgent = left <= 3000;
     buzzBarFillEl.classList.toggle("urgent", urgent);
     const wholeSecond = Math.ceil(left / 1000);
@@ -1354,6 +1381,7 @@ document.addEventListener("DOMContentLoaded", () => {
       );
     });
     selectedCodes.clear();
+    pendingSelections.clear();
     if (pending === 0 && selectionAnimationGeneration === generation)
       rejectedSelectionPending = false;
   }
@@ -1366,7 +1394,14 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!cardEl || cardEl.classList.contains("card-vanish")) return false;
     if (!canSelectCard() || cardEl.getAttribute("aria-disabled") === "true")
       return false;
-    socket.emit("select_card", { card: Number(cardEl.dataset.code) });
+    const code = Number(cardEl.dataset.code);
+    if (pendingSelections.has(code)) return true; // in flight: swallow repeat tap
+    const selected = !selectedCodes.has(code);
+    pendingSelections.set(code, selected);
+    markCardSelected(cardEl, selected);
+    SetAudio.click();
+    socket.emit("select_card", { card: code });
+    updateControlsEnabled();
     return true;
   }
 
@@ -1428,6 +1463,11 @@ document.addEventListener("DOMContentLoaded", () => {
     if (e.key !== "Enter" && e.key !== " " && e.code !== "Space") return;
     const card = e.target.closest(".card");
     if (!card) return;
+    if (e.repeat) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
     if (trySelectCard(card)) {
       e.preventDefault();
       e.stopPropagation();
@@ -1517,7 +1557,7 @@ document.addEventListener("DOMContentLoaded", () => {
     boardEl.classList.toggle("dimmed", !amBuzzer);
     buzzCaptionNameEl.textContent = amBuzzer ? "You" : data.name;
     buzzCaptionVerbEl.textContent = amBuzzer ? "are" : "is";
-    buzzBarFillEl.style.width = "100%";
+    buzzBarFillEl.style.transform = "scaleX(1)";
     buzzBarFillEl.classList.remove("urgent");
     revealCaptionEl.hidden = true;
     buzzCaptionEl.hidden = false;
@@ -1539,6 +1579,15 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // --- keyboard shortcuts --------------------------------------------------
+
+  // A mouse/touch click leaves focus on the clicked button, which would
+  // make Space/N activate it instead of the global shortcuts. Keyboard
+  // activation (detail 0) keeps focus.
+  document.addEventListener("click", (e) => {
+    if (e.detail === 0) return;
+    const active = document.activeElement;
+    if (active instanceof HTMLButtonElement) active.blur();
+  });
 
   document.addEventListener("keydown", (e) => {
     if (e.metaKey || e.ctrlKey || e.altKey) return;

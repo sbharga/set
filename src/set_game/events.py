@@ -415,6 +415,7 @@ def on_join_room(data=None):
 
     auth_digest = _credential_digest(player_token)
     sid = _request_sid()
+    stale_sid = None
     with _membership_lock:
         attached = _sid_index.get(sid)
         if attached and attached != (room_code, player_id):
@@ -431,7 +432,8 @@ def on_join_room(data=None):
             if not existing and len(game.players) >= MAX_PLAYERS:
                 return _error("This game already has 8 players.")
             # A duplicated tab can carry the same private credentials.
-            # Retire its older socket before attaching the new one; otherwise
+            # Retire its older socket (after the locks are released, since
+            # Engine.IO's disconnect can block on a slow socket); otherwise
             # that stale socket's later disconnect would mark the newly
             # connected player offline (and could even forfeit their buzz).
             previous_sid = existing.sid if existing and existing.connected else None
@@ -442,13 +444,15 @@ def on_join_room(data=None):
             snapshot = game.snapshot(_now())
             if previous_sid and previous_sid != sid:
                 _sid_index.pop(previous_sid, None)
-                socketio.server.disconnect(previous_sid, namespace="/")
+                stale_sid = previous_sid
             _sid_index[sid] = (game.room_code, player_id)
             emit("joined", {"player_id": player_id, "room_code": game.room_code})
             # A joining browser needs a complete recovery snapshot, but existing
             # players only need the small player-list delta.
             emit("room_state", snapshot)
             _emit_players_updated(game, _now())
+    if stale_sid:
+        socketio.server.disconnect(stale_sid, namespace="/")
 
 
 @socketio.on("disconnect")

@@ -39,10 +39,12 @@ const SetAudio = (() => {
     const context = ensureContext();
     if (context) {
       window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("pointerup", unlock);
       window.removeEventListener("keydown", unlock);
     }
   }
   window.addEventListener("pointerdown", unlock);
+  window.addEventListener("pointerup", unlock);
   window.addEventListener("keydown", unlock);
 
   function tone(

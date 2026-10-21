@@ -154,9 +154,7 @@ button {
   justify-content: space-between;
   padding: 9px max(var(--space-5), calc((100vw - 1200px) / 2));
   border-bottom: 1px solid rgba(222, 223, 217, 0.8);
-  background: rgba(247, 246, 242, 0.9);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
+  background: rgba(247, 246, 242, 0.97);
 }
 .brand {
   min-height: 44px;
@@ -927,10 +925,11 @@ kbd {
   display: block;
   height: 100%;
   width: 100%;
-  border-radius: var(--radius-pill);
   background: var(--accent);
+  transform-origin: left center;
+  transform: scaleX(1);
   transition:
-    width 0.1s linear,
+    transform 0.1s linear,
     background var(--dur-med) ease;
 }
 .buzz-bar-fill.urgent {
@@ -958,17 +957,13 @@ kbd {
   justify-content: center;
   align-content: center;
   gap: var(--board-gap);
-  transition:
-    filter var(--dur-med) ease,
-    opacity var(--dur-med) ease;
+  transition: opacity var(--dur-med) ease;
 }
 .board.dimmed {
-  filter: saturate(0.4);
   opacity: 0.5;
   pointer-events: none;
 }
 .board.revealing .card:not(.card-found) {
-  filter: saturate(0.35) brightness(0.94);
   opacity: 0.55;
   pointer-events: none;
 }
@@ -1087,7 +1082,6 @@ kbd {
   0% {
     transform: scale(1);
     opacity: 1;
-    filter: blur(0);
   }
   35% {
     transform: scale(1.045);
@@ -1099,7 +1093,6 @@ kbd {
   100% {
     transform: scale(0.92);
     opacity: 0;
-    filter: blur(2px);
   }
 }
 .card.card-enter {
@@ -1801,10 +1794,8 @@ kbd {
     grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr);
     padding: 8px 12px calc(8px + env(safe-area-inset-bottom));
     border-top: 1px solid rgba(222, 223, 217, 0.86);
-    background: rgba(247, 246, 242, 0.94);
+    background: rgba(247, 246, 242, 0.97);
     box-shadow: 0 -8px 24px rgba(25, 32, 31, 0.08);
-    -webkit-backdrop-filter: blur(12px);
-    backdrop-filter: blur(12px);
   }
   .game-view .actions .btn,
   .game-view .no-set-control {
